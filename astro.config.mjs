@@ -4,8 +4,7 @@ import cloudflare from "@astrojs/cloudflare";
 export default defineConfig({
   output: 'server',
   adapter: cloudflare({
-    platformProxy: {
-      enabled: true,
-    },
+    // This forces everything into one _worker.js FILE instead of a directory
+    functionPerRoute: false 
   }),
 });
