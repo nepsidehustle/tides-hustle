@@ -1,29 +1,32 @@
 export const prerender = false;
 
 export async function GET() {
+  const stations = [
+    { id: "8661070", name: "Myrtle Beach" },
+    { id: "8517201", name: "Jamaica Bay" }
+  ];
+
   try {
-    const station = "8454000"; 
-    // Using 'water_level' for real-time data instead of 'predictions'
-    const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station}&date=latest&product=water_level&datum=MLLW&time_zone=lst_ldt&units=english&format=json`;
+    const results = await Promise.all(
+      stations.map(async (site) => {
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&product=water_level&datum=MLLW&time_zone=lst_ldt&units=english&format=json`;
+        const res = await fetch(api);
+        const data = await res.json();
+        
+        if (data.data && data.data.length > 0) {
+          return `${site.name} is ${data.data[0].v} feet.`;
+        }
+        return `${site.name} data is unavailable.`;
+      })
+    );
 
-    const res = await fetch(api);
-    const data = await res.json();
-
-    // NOAA's real-time data uses the 'data' key, not 'predictions'
-    if (!data.data || data.data.length === 0) {
-        return new Response("I'm sorry, the tide sensor is currently not reporting data.", { status: 200 });
-    }
-
-    const latest = data.data[0];
-    const feet = latest.v;
-    
-    const speech = `The water is currently ${feet} feet deep at the Providence station.`;
+    const speech = `Current water levels: ${results.join(" ")}`;
 
     return new Response(speech, {
       status: 200,
       headers: { "Content-Type": "text/plain" }
     });
   } catch (error) {
-    return new Response("Sorry, I had trouble connecting to the tide service.", { status: 500 });
+    return new Response("Sorry, I couldn't reach the tide sensors right now.", { status: 500 });
   }
 }
