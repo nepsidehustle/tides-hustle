@@ -2,24 +2,25 @@ export const prerender = false;
 
 export async function GET() {
   try {
-    const station = "8454000"; // NOAA STATION ID
-    
-    // Updated URL: Uses 'date=latest' and 'range=24' so it always works regardless of the year
+    const station = "8454000"; 
+    // This URL grabs the latest predictions for a 24-hour window
     const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station}&date=latest&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json`;
 
     const res = await fetch(api);
     const data = await res.json();
 
-    // Safety check for NOAA data
+    // NOAA's list is called 'predictions'
     if (!data.predictions || data.predictions.length === 0) {
         return new Response("I'm sorry, the tide data is currently unavailable from NOAA.", { status: 200 });
     }
 
-    // Get the very last prediction in the list
-    const latest = data.predictions[data.predictions.length - 1];
+    // We want the prediction closest to 'now'
+    // Usually, the first item in a 'latest' request is the most recent
+    const latest = data.predictions[0];
+    const feet = latest.v;
     
-    // Use BACKTICKS (the key next to the 1) so Siri says the actual number
-    const speech = `The water is currently ${latest.v} feet deep.`;
+    // Using backticks (`) for the template literal
+    const speech = `The water is currently ${feet} feet deep in Providence.`;
 
     return new Response(speech, {
         status: 200,
