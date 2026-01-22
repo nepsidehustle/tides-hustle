@@ -2,21 +2,26 @@ export const prerender = false;
 
 export async function GET() {
   const stations = [
-    { id: "8661070", name: "Myrtle Beach" },
-    { id: "8517201", name: "Jamaica Bay" }
+    { id: "8661070", name: "Myrtle Beach", type: "water_level" },
+    { id: "8517201", name: "Jamaica Bay", type: "predictions" }
   ];
 
   try {
     const results = await Promise.all(
       stations.map(async (site) => {
-        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&product=water_level&datum=MLLW&time_zone=lst_ldt&units=english&format=json`;
+        const product = site.type;
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&product=${product}&datum=MLLW&time_zone=lst_ldt&units=english&format=json`;
+        
         const res = await fetch(api);
         const data = await res.json();
         
-        if (data.data && data.data.length > 0) {
-          return `${site.name} is ${data.data[0].v} feet.`;
+        // Handle both live data (.data) and predictions (.predictions)
+        const list = data.data || data.predictions;
+
+        if (list && list.length > 0) {
+          return `${site.name} is ${list[0].v} feet.`;
         }
-        return `${site.name} data is unavailable.`;
+        return `${site.name} data is currently unavailable.`;
       })
     );
 
