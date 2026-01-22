@@ -2,45 +2,48 @@ export const prerender = false;
 
 export async function GET() {
   const stations = [
-    { id: "8661070", name: "Myrtle Beach", type: "water_level" },
-    { id: "8517201", name: "Jamaica Bay", type: "predictions" }
+    { id: "8661070", name: "Myrtle Beach" },
+    { id: "8517201", name: "Jamaica Bay" }
   ];
 
   try {
     const results = await Promise.all(
       stations.map(async (site) => {
-        // We fetch 'predictions' for everyone now to see the "Next" tide
-        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json`;
+        // We use interval=h (hourly) to ensure we always get a data list
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json`;
         
         const res = await fetch(api);
         const data = await res.json();
         const predictions = data.predictions;
 
         if (!predictions || predictions.length < 2) {
-          return `${site.name} data is unavailable.`;
+          return `${site.name} is currently offline.`;
         }
 
+        // The first prediction is the current/most recent hour
         const current = predictions[0];
         const next = predictions[1];
         
-        // Determine if rising or falling
-        const direction = parseFloat(next.v) > parseFloat(current.v) ? "rising" : "falling";
-        
-        // Find the next High (H) or Low (L)
-        const nextEvent = next.type === "H" ? "high tide" : "low tide";
-        const eventTime = next.t.split(" ")[1]; // Gets just the time part
+        const curVal = parseFloat(current.v);
+        const nextVal = parseFloat(next.v);
+        const direction = nextVal > curVal ? "rising" : "falling";
 
-        return `${site.name} is ${current.v} feet and ${direction}. Next is ${nextEvent} at ${eventTime}.`;
+        // Optional: Look for the next peak in the 24h set
+        let nextHigh = predictions.find((p, i) => i > 0 && parseFloat(p.v) > parseFloat(predictions[i-1].v) && (predictions[i+1] ? parseFloat(p.v) > parseFloat(predictions[i+1].v) : true));
+        let nextLow = predictions.find((p, i) => i > 0 && parseFloat(p.v) < parseFloat(predictions[i-1].v) && (predictions[i+1] ? parseFloat(p.v) < parseFloat(predictions[i+1].v) : true));
+
+        // Simplified response for Siri clarity
+        return `${site.name} is ${curVal} feet and ${direction}.`;
       })
     );
 
-    const speech = `Tide Report. ${results.join(" ")}`;
+    const speech = `Tide Update. ${results.join(" ")}`;
 
     return new Response(speech, {
       status: 200,
       headers: { "Content-Type": "text/plain" }
     });
   } catch (error) {
-    return new Response("Sorry, the tide sensors are acting up.", { status: 500 });
+    return new Response("I couldn't reach the NOAA sensors right now.", { status: 500 });
   }
 }
