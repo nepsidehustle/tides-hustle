@@ -8,67 +8,51 @@ export async function GET() {
 
   try {
     const results = await Promise.all(stations.map(async (site) => {
-      // 1. Fetch 48 hours of HOURLY data. Hourly is better for finding peaks without "noise".
-      const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
+      const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
       
       const res = await fetch(api);
       const data = await res.json();
-      const predictions = data.predictions;
 
-      // 2. Determine "Current" Status
-      // We look at the first two points to see if the water is going up or down.
-      const nowVal = parseFloat(predictions[0].v);
-      const nextVal = parseFloat(predictions[1].v);
+      if (!data.predictions) return `${site.name} is currently offline.`;
+
+      const preds = data.predictions;
+      const nowVal = parseFloat(preds[0].v);
+      const nextVal = parseFloat(preds[1].v);
       const isRising = nextVal > nowVal;
-      const status = isRising ? "rising" : "falling";
+      
+      // FALLBACK LOGIC:
+      // If rising, find the absolute MAX in the next 12 points.
+      // If falling, find the absolute MIN in the next 12 points.
+      let targetPoint = preds[0];
+      let limit = Math.min(preds.length, 14); // Look about 14 hours ahead
 
-      // 3. Find the NEXT inflection point (High or Low)
-      let nextEvent = "unknown";
-      let nextTime = "";
-      let nextHeight = "";
-
-      // Loop through the data. We start at index 1 and look for the "turn".
-      for (let i = 1; i < predictions.length - 1; i++) {
-        const prev = parseFloat(predictions[i - 1].v);
-        const curr = parseFloat(predictions[i].v);
-        const next = parseFloat(predictions[i + 1].v);
-
-        // If we are RISING, we are looking for a HIGH (Peak)
-        if (isRising && curr > prev && curr > next) {
-          nextEvent = "High Tide";
-          nextTime = predictions[i].t;
-          nextHeight = curr.toFixed(1);
-          break; // Stop looking once we find the first one
+      if (isRising) {
+        // Find highest
+        for(let i=0; i<limit; i++) {
+            if (parseFloat(preds[i].v) > parseFloat(targetPoint.v)) targetPoint = preds[i];
         }
-
-        // If we are FALLING, we are looking for a LOW (Valley)
-        if (!isRising && curr < prev && curr < next) {
-          nextEvent = "Low Tide";
-          nextTime = predictions[i].t;
-          nextHeight = curr.toFixed(1);
-          break; // Stop looking
+      } else {
+        // Find lowest
+        for(let i=0; i<limit; i++) {
+             if (parseFloat(preds[i].v) < parseFloat(targetPoint.v)) targetPoint = preds[i];
         }
       }
 
-      // 4. Clean up the time format (2026-01-23 16:00 -> 4:00 PM)
-      let timeString = "soon";
-      if (nextTime) {
-        const [d, t] = nextTime.split(" ");
-        let [h, m] = t.split(":");
-        let hour = parseInt(h);
-        const ampm = hour >= 12 ? "PM" : "AM";
-        hour = hour % 12 || 12;
-        timeString = `${hour}:${m} ${ampm}`;
-      }
+      const eventType = isRising ? "High Tide" : "Low Tide";
+      const eventHeight = parseFloat(targetPoint.v).toFixed(1);
+      
+      // Parse time safely
+      let timeStr = targetPoint.t.split(" ")[1]; // "14:30"
+      let [h, m] = timeStr.split(":");
+      let hours = parseInt(h);
+      let ampm = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12 || 12;
 
-      return `${site.name} is ${nowVal.toFixed(1)}ft and ${status}. Next ${nextEvent} is ${nextHeight}ft at ${timeString}.`;
+      return `${site.name} is ${nowVal.toFixed(1)}ft and ${isRising ? "rising" : "falling"}. Next ${eventType} is ${eventHeight}ft at ${hours}:${m} ${ampm}.`;
     }));
 
-    return new Response(results.join(" "), {
-      status: 200,
-      headers: { "Content-Type": "text/plain", "Cache-Control": "no-cache" }
-    });
+    return new Response(results.join(" "), { status: 200 });
   } catch (e) {
-    return new Response("Tide sensors unavailable.", { status: 200 });
+    return new Response("Siri is having trouble connecting to NOAA.", { status: 200 });
   }
 }

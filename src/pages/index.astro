@@ -12,22 +12,18 @@ export const prerender = false;
 <body class="bg-white text-slate-800 p-6 md:p-12 font-sans">
     <div class="max-w-5xl mx-auto">
         <header class="mb-10 flex justify-between items-center">
-            <div>
-                <h1 class="text-3xl font-black text-slate-900 tracking-tighter">Tide<span class="text-blue-600">Track</span></h1>
-                <p class="text-slate-400 text-sm font-bold tracking-widest uppercase mt-1">48-Hour Forecast</p>
-            </div>
-            <div id="clock" class="text-xl font-mono text-slate-400">--:--</div>
+            <h1 class="text-3xl font-black text-slate-900 tracking-tighter">Tide<span class="text-blue-600">Track</span></h1>
+            <div id="clock" class="text-xl font-mono text-slate-400">Loading...</div>
         </header>
         
         <div id="grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div class="col-span-full py-24 text-center text-slate-300 animate-pulse">
-                Loading Tide Data...
+            <div id="status" class="col-span-full py-24 text-center text-slate-300 animate-pulse">
+                Contacting NOAA...
             </div>
         </div>
     </div>
 
     <script>
-        // Simple clock
         setInterval(() => {
             document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }, 1000);
@@ -35,52 +31,51 @@ export const prerender = false;
         async function init() {
             try {
                 const res = await fetch('/api/tide-data');
+                // Check if the server failed before trying to read JSON
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                
                 const data = await res.json();
+                
+                // Check for API-level errors
+                if (data.error) throw new Error(data.error);
+
                 const container = document.getElementById('grid');
-                container.innerHTML = ''; // Clear loader
+                container.innerHTML = ''; 
 
                 data.forEach((station, i) => {
+                    // Safety check: Did this specific station fail?
+                    if (station.error || !station.predictions || station.predictions.length === 0) {
+                        container.innerHTML += `<div class="p-6 border border-red-200 rounded-xl text-red-500">Error for ${station.name}: ${station.error || 'No data'}</div>`;
+                        return;
+                    }
+
                     const card = document.createElement('div');
                     card.className = 'border-2 border-slate-100 p-6 rounded-3xl shadow-lg bg-white';
-                    
-                    // We need a canvas with a set height
                     card.innerHTML = `
-                        <div class="flex justify-between items-end mb-6">
-                            <h2 class="text-2xl font-bold text-slate-800">${station.name}</h2>
-                            <span class="text-blue-600 font-bold text-sm bg-blue-50 px-3 py-1 rounded-full">LIVE</span>
-                        </div>
-                        <div class="relative h-64 w-full">
-                            <canvas id="c-${i}"></canvas>
-                        </div>
+                        <h2 class="text-2xl font-bold mb-6 text-slate-800">${station.name}</h2>
+                        <div class="h-64"><canvas id="c-${i}"></canvas></div>
                     `;
                     container.appendChild(card);
 
-                    // Extract strict arrays for the chart
                     const labels = station.predictions.map(p => p.t);
                     const values = station.predictions.map(p => p.v);
-                    
-                    // Find peaks for the markers
                     const high = Math.max(...values);
                     const low = Math.min(...values);
 
-                    const ctx = document.getElementById(`c-${i}`);
-                    
-                    new Chart(ctx, {
+                    new Chart(document.getElementById(`c-${i}`), {
                         type: 'line',
                         data: {
                             labels: labels,
                             datasets: [{
                                 data: values,
-                                borderColor: '#2563eb', // Strong Blue
+                                borderColor: '#2563eb',
                                 borderWidth: 4,
-                                tension: 0.4, // Smooths the hourly points into a wave
+                                tension: 0.4,
                                 pointRadius: (c) => {
                                     const v = c.dataset.data[c.dataIndex];
                                     return (v === high || v === low) ? 6 : 0;
                                 },
                                 pointBackgroundColor: '#2563eb',
-                                pointBorderColor: '#fff',
-                                pointBorderWidth: 2,
                                 fill: true,
                                 backgroundColor: 'rgba(37, 99, 235, 0.05)'
                             }]
@@ -91,24 +86,23 @@ export const prerender = false;
                             plugins: { legend: { display: false } },
                             scales: {
                                 x: {
-                                    // "Category" simply lists the items. It is impossible for this to stack points.
                                     type: 'category', 
                                     grid: { display: false },
                                     ticks: {
                                         maxTicksLimit: 6,
                                         callback: function(val, index) {
-                                            // Parse "2026-01-23 10:00" -> "10 AM"
                                             const label = this.getLabelForValue(val);
+                                            // Handle "2026-01-23 10:00" string safely
+                                            if (!label) return "";
                                             const timePart = label.split(' ')[1];
+                                            if (!timePart) return "";
                                             const h = parseInt(timePart.split(':')[0]);
                                             const ampm = h >= 12 ? 'PM' : 'AM';
-                                            const hour12 = h % 12 || 12;
-                                            return `${hour12} ${ampm}`;
+                                            return `${h % 12 || 12} ${ampm}`;
                                         }
                                     }
                                 },
                                 y: {
-                                    // Force the chart to encompass the wave + 1 foot buffer
                                     suggestedMin: low - 1,
                                     suggestedMax: high + 1,
                                     border: { display: false },
@@ -120,7 +114,7 @@ export const prerender = false;
                 });
             } catch (err) {
                 console.error(err);
-                document.getElementById('grid').innerHTML = `<p class="text-red-500 text-center col-span-full">Error loading dashboard.</p>`;
+                document.getElementById('status').innerHTML = `<span class="text-red-500 font-bold">System Error: ${err.message}</span>`;
             }
         }
         init();
