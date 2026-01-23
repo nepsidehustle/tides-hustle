@@ -8,32 +8,42 @@ export async function GET() {
 
   try {
     const results = await Promise.all(stations.map(async (site) => {
-      const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
+      // FIX: Changed to 'date=today' so NOAA accepts the request
+      const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
       
       const res = await fetch(api);
       const data = await res.json();
 
-      if (!data.predictions) return `${site.name} is currently offline.`;
+      if (!data.predictions) return `${site.name} data is currently unavailable.`;
 
       const preds = data.predictions;
-      const nowVal = parseFloat(preds[0].v);
-      const nextVal = parseFloat(preds[1].v);
-      const isRising = nextVal > nowVal;
       
-      // FALLBACK LOGIC:
-      // If rising, find the absolute MAX in the next 12 points.
-      // If falling, find the absolute MIN in the next 12 points.
-      let targetPoint = preds[0];
-      let limit = Math.min(preds.length, 14); // Look about 14 hours ahead
+      // Since 'date=today' starts at midnight, we need to find "NOW" in the list
+      const now = new Date();
+      // Find the point in the array closest to the current time
+      const currentIndex = preds.findIndex((p: any) => {
+          const pTime = new Date(p.t.replace(/-/g, "/"));
+          return pTime > now;
+      }) || 0;
+
+      // Use the closest point as "Current"
+      const currentPoint = preds[currentIndex] || preds[0];
+      const nextPoint = preds[currentIndex + 1] || preds[1];
+      
+      const nowVal = parseFloat(currentPoint.v);
+      const nextVal = parseFloat(nextPoint.v);
+      const isRising = nextVal > nowVal;
+
+      // Find the next Peak/Valley starting from right now
+      let targetPoint = currentPoint;
+      let limit = Math.min(preds.length, currentIndex + 12); 
 
       if (isRising) {
-        // Find highest
-        for(let i=0; i<limit; i++) {
+        for(let i=currentIndex; i<limit; i++) {
             if (parseFloat(preds[i].v) > parseFloat(targetPoint.v)) targetPoint = preds[i];
         }
       } else {
-        // Find lowest
-        for(let i=0; i<limit; i++) {
+        for(let i=currentIndex; i<limit; i++) {
              if (parseFloat(preds[i].v) < parseFloat(targetPoint.v)) targetPoint = preds[i];
         }
       }
@@ -41,8 +51,7 @@ export async function GET() {
       const eventType = isRising ? "High Tide" : "Low Tide";
       const eventHeight = parseFloat(targetPoint.v).toFixed(1);
       
-      // Parse time safely
-      let timeStr = targetPoint.t.split(" ")[1]; // "14:30"
+      let timeStr = targetPoint.t.split(" ")[1];
       let [h, m] = timeStr.split(":");
       let hours = parseInt(h);
       let ampm = hours >= 12 ? "PM" : "AM";
@@ -53,6 +62,6 @@ export async function GET() {
 
     return new Response(results.join(" "), { status: 200 });
   } catch (e) {
-    return new Response("Siri is having trouble connecting to NOAA.", { status: 200 });
+    return new Response("Siri cannot connect to NOAA right now.", { status: 200 });
   }
 }
