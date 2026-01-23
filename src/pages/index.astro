@@ -1,111 +1,161 @@
 ---
-// src/pages/index.astro
+// This is the "Frontmatter". It tells the server not to pre-build this page 
+// because we want fresh tide data every time someone opens it.
 export const prerender = false;
 ---
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TideTrack Dashboard</title>
+    <title>TideTrack Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Dark mode aesthetic with a subtle blue glow at the top */
         body { 
             background: #020617; 
             color: #f8fafc; 
             min-height: 100vh; 
-            font-family: ui-sans-serif, system-ui, sans-serif; 
+            font-family: sans-serif; 
         }
+        /* "Glassmorphism" cards: translucent and blurry like frosted glass */
         .glass-card { 
             background: rgba(255, 255, 255, 0.03); 
             backdrop-filter: blur(12px); 
             border: 1px solid rgba(255, 255, 255, 0.1); 
-            border-radius: 24px; 
+            border-radius: 1.5rem; 
         }
     </style>
 </head>
-<body class="p-6 md:p-12">
+<body class="p-4 md:p-10">
     <div class="max-w-6xl mx-auto">
-        <header class="mb-10 flex justify-between items-end">
-            <div>
-                <h1 class="text-3xl font-bold text-white tracking-tighter">
-                    Tide<span class="text-blue-400 font-light">Track</span>
-                </h1>
-                <p class="text-slate-500 text-xs uppercase tracking-widest mt-1">3-Day Prediction Wave</p>
-            </div>
-            <div id="clock" class="text-slate-400 font-mono text-sm"></div>
+        <header class="mb-8">
+            <h1 class="text-2xl md:text-4xl font-bold text-white tracking-tight">
+                Tide<span class="text-blue-400">Track</span> Pro
+            </h1>
+            <p class="text-slate-500 text-sm">6-Minute High-Resolution Prediction</p>
         </header>
 
-        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div id="loader" class="col-span-full py-20 text-center text-slate-500 animate-pulse">
-                Fetching NOAA Data...
+        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="py-20 text-center col-span-full text-slate-500 animate-pulse">
+                Accessing NOAA Satellites...
             </div>
         </div>
     </div>
 
     <script>
-        // Plugin to draw the Vertical "Now" Line
-        const nowLinePlugin = {
-            id: 'nowLine',
-            afterDraw: (chart) => {
-                const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
-                const now = new Date();
-                
-                // Find the index of the data point closest to "Now"
-                const labels = chart.data.labels;
-                let closestIndex = -1;
-                let minDiff = Infinity;
-
-                labels.forEach((label, i) => {
-                    const diff = Math.abs(new Date(label.replace(/-/g, "/")) - now);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closestIndex = i;
-                    }
-                });
-
-                if (closestIndex !== -1) {
-                    const xPos = x.getPixelForValue(labels[closestIndex]);
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.setLineDash([5, 5]);
-                    ctx.moveTo(xPos, top);
-                    ctx.lineTo(xPos, bottom);
-                    ctx.lineWidth = 1;
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                    ctx.stroke();
-                    
-                    // Draw "NOW" text
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-                    ctx.font = '10px Arial';
-                    ctx.fillText('NOW', xPos - 10, top - 10);
-                    ctx.restore();
-                }
-            }
-        };
-
         async function init() {
             try {
                 const res = await fetch('/api/tide-data');
                 const data = await res.json();
                 const container = document.getElementById('dashboard-grid');
-                container.innerHTML = '';
+                container.innerHTML = ''; // Remove the loading text
 
                 data.forEach((station, i) => {
-                    const div = document.createElement('div');
-                    div.className = 'glass-card p-6';
-                    div.innerHTML = `
-                        <h2 class="text-xl font-bold mb-6">${station.name}</h2>
-                        <div class="h-64"><canvas id="c-${i}"></canvas></div>
+                    // Create a container for each station
+                    const card = document.createElement('div');
+                    card.className = 'glass-card p-4 md:p-8';
+                    card.innerHTML = `
+                        <h2 class="text-xl font-bold mb-4">${station.name}</h2>
+                        <div class="h-64 md:h-80 w-full">
+                            <canvas id="chart-${i}"></canvas>
+                        </div>
                     `;
-                    container.appendChild(div);
+                    container.appendChild(card);
 
-                    const ctx = document.getElementById(`c-${i}`).getContext('2d');
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 250);
-                    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.4)');
-                    gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
+                    const ctx = document.getElementById(`chart-${i}`).getContext('2d');
+                    
+                    // Logic to find Highs and Lows for the markers
+                    const values = station.predictions.map(p => p.v);
+                    const maxTide = Math.max(...values);
+                    const minTide = Math.min(...values);
 
                     new Chart(ctx, {
                         type: 'line',
                         data: {
                             labels: station.predictions.map(p => p.t),
+                            datasets: [{
+                                data: values,
+                                borderColor: '#38bdf8',
+                                borderWidth: 2,
+                                fill: true,
+                                // Gradient color: Blue at top, fades to invisible at bottom
+                                backgroundColor: (context) => {
+                                    const g = context.chart.ctx.createLinearGradient(0, 0, 0, 400);
+                                    g.addColorStop(0, 'rgba(56, 189, 248, 0.2)');
+                                    g.addColorStop(1, 'rgba(56, 189, 248, 0)');
+                                    return g;
+                                },
+                                tension: 0.4, // Smooths out the lines into waves
+                                pointRadius: (context) => {
+                                    // Only show dots on the absolute peak and absolute valley
+                                    const val = context.dataset.data[context.dataIndex];
+                                    return (val === maxTide || val === minTide) ? 4 : 0;
+                                },
+                                pointBackgroundColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    enabled: true,
+                                    backgroundColor: '#1e293b',
+                                    padding: 12,
+                                    bodyFont: { size: 14 }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    display: true,
+                                    grid: { display: false },
+                                    ticks: {
+                                        maxTicksLimit: 4, // Keeps the bottom from getting crowded on phones
+                                        color: '#64748b',
+                                        callback: function(val) {
+                                            const d = new Date(this.getLabelForValue(val).replace(/-/g, "/"));
+                                            return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
+                                        }
+                                    }
+                                },
+                                y: {
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#64748b' }
+                                }
+                            }
+                        },
+                        // Custom plugin to draw the vertical "Guide Line" when hovering
+                        plugins: [{
+                            id: 'verticalLine',
+                            afterDraw: (chart) => {
+                                if (chart.tooltip?._active?.length) {
+                                    const x = chart.tooltip._active[0].element.x;
+                                    const yAxis = chart.scales.y;
+                                    const ctx = chart.ctx;
+                                    ctx.save();
+                                    ctx.beginPath();
+                                    ctx.moveTo(x, yAxis.top);
+                                    ctx.lineTo(x, yAxis.bottom);
+                                    ctx.lineWidth = 1;
+                                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                                    ctx.stroke();
+                                    ctx.restore();
+                                }
+                            }
+                        }]
+                    });
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+        init();
+    </script>
+</body>
+</html>
