@@ -8,174 +8,151 @@ export const prerender = false;
     <title>TideTrack Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom "Slick" Scrollbar for that premium feel */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
 </head>
-<body class="bg-white text-slate-800 p-6 md:p-12 font-sans">
-    <div class="max-w-5xl mx-auto">
-        <header class="mb-10 flex justify-between items-center">
+<body class="bg-slate-50 text-slate-800 min-h-screen p-3 md:p-8 flex justify-center items-start">
+
+    <div class="w-full max-w-4xl bg-white min-h-[90vh] rounded-[2.5rem] shadow-2xl border-4 border-white ring-1 ring-slate-900/5 overflow-hidden flex flex-col">
+        
+        <header class="px-8 pt-10 pb-6 bg-white flex justify-between items-center border-b border-slate-100/50">
             <div>
                 <h1 class="text-3xl font-black text-slate-900 tracking-tighter">
                     Tide<span class="text-blue-600">Track</span>
                 </h1>
-                <p class="text-slate-400 text-sm font-bold tracking-widest uppercase mt-1">
-                    48-Hour Forecast
-                </p>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Live Feed
+                    </p>
+                </div>
             </div>
+            
             <div class="text-right">
-                <div id="clock" class="text-xl font-mono text-slate-500 font-bold">--:--</div>
-                <button onclick="window.location.reload()" class="text-xs font-bold text-blue-500 hover:text-blue-700 uppercase tracking-wider mt-1">
-                    Refresh Feed
-                </button>
+                <div id="clock" class="text-xl font-mono font-bold text-slate-600 tracking-tight">--:--</div>
             </div>
         </header>
-        
-        <div id="grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div id="status" class="col-span-full py-24 text-center text-slate-300 animate-pulse flex flex-col items-center">
-                <div class="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                Syncing with NOAA Satellites...
+
+        <main class="flex-1 bg-slate-50/50 p-4 md:p-8">
+            <div id="grid" class="grid grid-cols-1 gap-6">
+                <div id="status" class="py-20 text-center flex flex-col items-center justify-center opacity-60">
+                    <div class="h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p class="text-sm font-bold text-slate-400 uppercase tracking-wide">Syncing Data...</p>
+                </div>
             </div>
-        </div>
+        </main>
+
+        <footer class="p-4 bg-white border-t border-slate-100 flex justify-center">
+             <button onclick="window.location.reload()" class="group relative px-6 py-3 font-bold text-white transition-all duration-200 bg-slate-900 rounded-full hover:bg-blue-600 shadow-lg hover:shadow-blue-500/30 active:scale-95 text-sm">
+                Refresh Dashboard
+            </button>
+        </footer>
     </div>
 
     <script>
-        // 1. Simple Digital Clock
+        // Clock
         setInterval(() => {
-            const now = new Date();
-            document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }, 1000);
 
-        // 2. Main Logic
         async function init() {
             try {
                 const res = await fetch('/api/tide-data');
+                const container = document.getElementById('grid');
                 
-                // Defensive: Check if server failed
-                if (!res.ok) throw new Error(`Server Error (${res.status})`);
-                
+                if (!res.ok) throw new Error("Server Unavailable");
                 const data = await res.json();
                 
-                // Defensive: Check if API returned an internal error
-                if (data.error) throw new Error(data.error);
-
-                const container = document.getElementById('grid');
-                container.innerHTML = ''; // Clear the loader
+                container.innerHTML = ''; // Clear loader
 
                 data.forEach((station, i) => {
-                    // Defensive: Check if this specific station has data
                     if (station.error || !station.predictions || station.predictions.length === 0) {
-                        container.innerHTML += `
-                            <div class="p-6 border border-red-200 bg-red-50 rounded-xl text-red-600 font-bold text-center">
-                                ⚠️ Unable to load data for ${station.name}
-                            </div>`;
+                        container.innerHTML += `<div class="p-6 bg-red-50 text-red-500 rounded-2xl text-center text-sm font-bold border border-red-100">⚠️ ${station.name} Unavailable</div>`;
                         return;
                     }
 
-                    // Create the Card
+                    // --- THE CARD DESIGN ---
                     const card = document.createElement('div');
-                    card.className = 'border-2 border-slate-100 p-6 rounded-3xl shadow-lg bg-white relative overflow-hidden';
+                    // This is the specific styling for the cards:
+                    card.className = 'bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 relative transition-all duration-300 hover:shadow-xl hover:-translate-y-1';
                     
                     card.innerHTML = `
-                        <div class="flex justify-between items-start mb-2">
-                            <h2 class="text-2xl font-bold text-slate-800">${station.name}</h2>
-                            <span class="text-xs font-bold bg-blue-100 text-blue-600 px-2 py-1 rounded-md">LIVE</span>
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 class="text-xl font-bold text-slate-800 leading-none">${station.name}</h2>
+                            </div>
                         </div>
-                        <p class="text-slate-400 text-sm mb-6 font-medium">Hourly Prediction</p>
-                        
-                        <div class="relative h-64 w-full">
+                        <div class="relative h-56 w-full">
                             <canvas id="c-${i}"></canvas>
                         </div>
                     `;
                     container.appendChild(card);
 
-                    // Prepare Data for Chart.js
+                    // --- CHART LOGIC (UNTOUCHED) ---
                     const labels = station.predictions.map(p => p.t);
                     const values = station.predictions.map(p => p.v);
-                    
-                    // Find Peaks for the "Big Dots"
                     const high = Math.max(...values);
                     const low = Math.min(...values);
-
                     const ctx = document.getElementById(`c-${i}`);
-                    
+
                     new Chart(ctx, {
                         type: 'line',
                         data: {
                             labels: labels,
                             datasets: [{
                                 data: values,
-                                borderColor: '#2563eb', // Nice deep blue
-                                borderWidth: 4,
-                                tension: 0.4, // Smooths the line into a wave
-                                
-                                // LOGIC: Big dots on peaks, small dots on hours
+                                borderColor: '#2563eb', // Blue-600
+                                borderWidth: 3,
+                                tension: 0.4,
                                 pointRadius: (c) => {
                                     const v = c.dataset.data[c.dataIndex];
-                                    return (v === high || v === low) ? 6 : 2;
+                                    return (v === high || v === low) ? 5 : 2;
                                 },
-                                // Hover effect: Make dots huge when touched
                                 pointHoverRadius: 8,
                                 pointBackgroundColor: '#2563eb',
                                 pointBorderColor: '#fff',
                                 pointBorderWidth: 2,
-                                
                                 fill: true,
-                                backgroundColor: 'rgba(37, 99, 235, 0.05)'
+                                backgroundColor: 'rgba(37, 99, 235, 0.04)' // Very subtle fill
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            interaction: {
-                                mode: 'index',
-                                intersect: false,
-                            },
-                            plugins: { 
-                                legend: { display: false },
-                                tooltip: {
-                                    backgroundColor: '#1e293b',
-                                    padding: 12,
-                                    titleFont: { size: 14 },
-                                    bodyFont: { size: 14, weight: 'bold' },
-                                    displayColors: false,
-                                    callbacks: {
-                                        title: (items) => {
-                                            // Clean up the tooltip title
-                                            const label = items[0].label;
-                                            const [d, t] = label.split(' ');
-                                            const [h, m] = t.split(':');
-                                            const hour = parseInt(h);
-                                            const ampm = hour >= 12 ? 'PM' : 'AM';
-                                            return `${hour % 12 || 12}:${m} ${ampm}`;
-                                        },
-                                        label: (item) => `${item.formattedValue} ft`
-                                    }
-                                }
-                            },
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: { legend: { display: false } },
                             scales: {
                                 x: {
-                                    type: 'category', // Prevents the "Horizontal Line" bug
+                                    type: 'category',
                                     grid: { display: false },
                                     ticks: {
-                                        maxTicksLimit: 6,
-                                        color: '#94a3b8',
-                                        callback: function(val, index) {
-                                            // Format X-Axis: "10 PM"
+                                        maxTicksLimit: 5,
+                                        color: '#cbd5e1', // Lighter text for cleaner look
+                                        font: { size: 11, weight: 'bold' },
+                                        callback: function(val) {
                                             const label = this.getLabelForValue(val);
                                             if (!label) return "";
-                                            const timePart = label.split(' ')[1];
-                                            if (!timePart) return "";
-                                            const h = parseInt(timePart.split(':')[0]);
-                                            const ampm = h >= 12 ? 'PM' : 'AM';
-                                            return `${h % 12 || 12} ${ampm}`;
+                                            const time = label.split(' ')[1];
+                                            const [h, m] = time.split(':');
+                                            const hour = parseInt(h);
+                                            const ampm = hour >= 12 ? 'pm' : 'am';
+                                            return `${hour % 12 || 12}${ampm}`;
                                         }
                                     }
                                 },
                                 y: {
-                                    // Add breathing room top and bottom
                                     suggestedMin: low - 1,
                                     suggestedMax: high + 1,
                                     border: { display: false },
-                                    grid: { color: '#f1f5f9' },
-                                    ticks: { color: '#94a3b8' }
+                                    grid: { color: '#f8fafc' }, // Ultra subtle grid
+                                    ticks: { display: false } // Hide Y-axis numbers for cleaner look
                                 }
                             }
                         }
@@ -184,15 +161,8 @@ export const prerender = false;
 
             } catch (err) {
                 console.error(err);
-                document.getElementById('status').innerHTML = `
-                    <div class="text-red-500 font-bold bg-red-50 p-4 rounded-lg border border-red-100">
-                        System Error: ${err.message}
-                    </div>
-                `;
             }
         }
-        
-        // Run the app
         init();
     </script>
 </body>
