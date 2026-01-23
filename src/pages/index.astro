@@ -10,93 +10,44 @@ export const prerender = false;
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { 
-            background: #020617; 
-            background-image: radial-gradient(circle at 50% -20%, #1e293b, #020617);
-            color: #f8fafc; 
-            min-height: 100vh; 
-            font-family: ui-sans-serif, system-ui, sans-serif; 
-        }
-        .glass-card { 
-            background: rgba(255, 255, 255, 0.03); 
-            backdrop-filter: blur(12px); 
-            border: 1px solid rgba(255, 255, 255, 0.1); 
-            border-radius: 24px; 
-            transition: transform 0.3s ease;
-        }
-        .glass-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(56, 189, 248, 0.4);
-        }
+        body { background: #020617; color: #f8fafc; min-height: 100vh; font-family: sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; }
     </style>
 </head>
-<body class="p-6 md:p-12">
+<body class="p-8">
     <div class="max-w-6xl mx-auto">
-        <header class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-                <h1 class="text-4xl font-black tracking-tighter text-white">
-                    Tide<span class="text-blue-400">Track</span>
-                </h1>
-                <p class="text-slate-500 font-medium uppercase tracking-widest text-xs mt-1">Live Maritime Intelligence</p>
-            </div>
-            <div class="text-right">
-                <p id="current-time" class="text-slate-400 text-sm font-mono"></p>
-            </div>
+        <header class="mb-10">
+            <h1 class="text-3xl font-bold text-blue-400">TideTrack <span class="text-white font-light text-xl italic">Live Waves</span></h1>
         </header>
 
-        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div id="loader" class="col-span-full py-20 text-center">
-                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mb-4"></div>
-                <p class="text-slate-500 animate-pulse">Synchronizing with NOAA Deep-Sea Sensors...</p>
-            </div>
+        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8 text-center">
+            <p id="loading" class="col-span-full py-20 text-slate-500 animate-pulse">Connecting to NOAA sensors...</p>
         </div>
     </div>
 
     <script>
-        // Update the clock
-        setInterval(() => {
-            const now = new Date();
-            document.getElementById('current-time').innerText = now.toLocaleTimeString();
-        }, 1000);
-
-        async function initDashboard() {
+        async function init() {
             try {
                 const res = await fetch('/api/tide-data');
-                const stations = await res.json();
-                
+                const data = await res.json();
                 const container = document.getElementById('dashboard-grid');
-                container.innerHTML = ''; // Clear loader
+                container.innerHTML = '';
 
-                stations.forEach((station, i) => {
+                data.forEach((station, i) => {
                     const div = document.createElement('div');
-                    div.className = 'glass-card p-8 shadow-2xl';
+                    div.className = 'glass-card p-6';
                     div.innerHTML = `
-                        <div class="flex justify-between items-start mb-8">
-                            <div>
-                                <h2 class="text-2xl font-bold text-white">${station.name}</h2>
-                                <p class="text-xs text-slate-500 uppercase tracking-widest">72-Hour Prediction Model</p>
-                            </div>
-                            <div class="h-2 w-2 rounded-full bg-blue-400 animate-ping"></div>
-                        </div>
-                        <div class="h-64 relative">
-                            <canvas id="chart-${i}"></canvas>
-                        </div>
-                        <div class="mt-6 flex justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest border-t border-white/5 pt-4">
-                            <span>Now</span>
-                            <span>+24h</span>
-                            <span>+48h</span>
-                            <span>+72h</span>
-                        </div>
+                        <h2 class="text-xl font-bold mb-4 text-left">${station.name}</h2>
+                        <div class="h-64"><canvas id="c-${i}"></canvas></div>
                     `;
                     container.appendChild(div);
 
-                    const ctx = document.getElementById(`chart-${i}`).getContext('2d');
-                    
-                    // Create a beautiful blue gradient for the wave fill
+                    const ctx = document.getElementById(`c-${i}`).getContext('2d');
                     const gradient = ctx.createLinearGradient(0, 0, 0, 250);
                     gradient.addColorStop(0, 'rgba(56, 189, 248, 0.4)');
                     gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
 
+                    // @ts-ignore
                     new Chart(ctx, {
                         type: 'line',
                         data: {
@@ -107,45 +58,29 @@ export const prerender = false;
                                 borderWidth: 3,
                                 fill: true,
                                 backgroundColor: gradient,
-                                tension: 0.4, // THE MAGIC: This creates the "Elegant Wave"
-                                pointRadius: 0,
-                                pointHitRadius: 50
+                                tension: 0.4,
+                                pointRadius: 0
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: { 
-                                legend: { display: false },
-                                tooltip: {
-                                    mode: 'index',
-                                    intersect: false,
-                                    backgroundColor: '#0f172a',
-                                    titleColor: '#38bdf8',
-                                    bodyColor: '#f8fafc',
-                                    borderColor: 'rgba(255,255,255,0.1)',
-                                    borderWidth: 1,
-                                    displayColors: false,
-                                    callbacks: {
-                                        label: (context) => ` ${context.parsed.y.toFixed(2)} ft`
-                                    }
-                                }
-                            },
+                            plugins: { legend: { display: false } },
                             scales: {
-                                x: { 
-                                    display: false // We use our own custom labels at the bottom for elegance
-                                },
+                                x: { display: false },
                                 y: { 
-                                    beginAtZero: false,
-                                    suggestedMin: -1,
-                                    suggestedMax: 6,
-                                    grid: { color: 'rgba(255,255,255,0.05)', drawTicks: false },
-                                    ticks: { color: '#64748b', font: { size: 10 } }
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#64748b' }
                                 }
                             }
                         }
                     });
                 });
             } catch (err) {
-                console.error("Dashboard failed:", err);
-                document.getElementById
+                console.error("Dashboard error:", err);
+            }
+        }
+        init();
+    </script>
+</body>
+</html>
