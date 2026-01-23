@@ -42,7 +42,7 @@ export const prerender = false;
             <div id="grid" class="grid grid-cols-1 gap-6">
                 <div id="status" class="py-20 text-center flex flex-col items-center justify-center opacity-60">
                     <div class="h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p class="text-sm font-bold text-slate-400 uppercase tracking-wide">Locating Tides...</p>
+                    <p class="text-sm font-bold text-slate-400 uppercase tracking-wide">Calculating Predictions...</p>
                 </div>
             </div>
         </main>
@@ -52,8 +52,11 @@ export const prerender = false;
                 Refresh Dashboard
             </button>
             <div class="text-[10px] leading-relaxed text-center text-slate-400 max-w-sm mx-auto pt-2">
-                <p>Gray line = Past. Blue line = Forecast.</p>
-                <p class="mt-1">EDUCATIONAL USE ONLY. <span class="text-red-400 font-medium">NOT FOR NAVIGATION.</span></p>
+                <p>
+                    <span class="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1"></span>Now 
+                    <span class="inline-block w-2 h-2 rounded-full bg-slate-900 ml-2 mr-1"></span>Next Event
+                </p>
+                <p class="mt-2 text-slate-300">EDUCATIONAL USE ONLY. NOT FOR NAVIGATION.</p>
             </div>
         </footer>
     </div>
@@ -67,24 +70,76 @@ export const prerender = false;
             try {
                 const res = await fetch('/api/tide-data');
                 const container = document.getElementById('grid');
-                
                 if (!res.ok) throw new Error("Server Unavailable");
-                const data = await res.json();
-                
+                const fullData = await res.json();
                 container.innerHTML = ''; 
 
-                data.forEach((station, i) => {
+                fullData.forEach((station, i) => {
                     if (station.error || !station.predictions || station.predictions.length === 0) {
-                        container.innerHTML += `<div class="p-6 bg-red-50 text-red-500 rounded-2xl text-center text-sm font-bold border border-red-100">⚠️ ${station.name} Unavailable</div>`;
+                        container.innerHTML += `<div class="p-6 bg-red-50 text-red-500 rounded-2xl text-center">⚠️ ${station.name} Unavailable</div>`;
                         return;
                     }
 
-                    const card = document.createElement('div');
-                    card.className = 'bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 relative transition-all duration-300 hover:shadow-xl';
+                    // --- 1. SLICING THE DATA (THE WINDOW) ---
+                    const now = new Date();
+                    // Find the index closest to current time
+                    let rawNowIndex = 0;
+                    let minDiff = Infinity;
+                    station.predictions.forEach((p, idx) => {
+                        const pDate = new Date(p.t.replace(/-/g, '/')); 
+                        const diff = Math.abs(now - pDate);
+                        if (diff < minDiff) { minDiff = diff; rawNowIndex = idx; }
+                    });
+
+                    // Define the window: 4 hours back, 48 hours forward
+                    const startIdx = Math.max(0, rawNowIndex - 4);
+                    const endIdx = Math.min(station.predictions.length, rawNowIndex + 48);
                     
+                    // Create the display subset
+                    const subset = station.predictions.slice(startIdx, endIdx);
+                    
+                    // Re-calculate "Now" index relative to this new small list
+                    // It will usually be index 4 (since we stepped back 4)
+                    const displayNowIndex = rawNowIndex - startIdx;
+
+                    // --- 2. FIND THE NEXT BIG EVENT (BLACK DOT) ---
+                    let nextEventIndex = -1;
+                    // Scan forward from Now
+                    for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
+                        const prev = subset[j-1].v;
+                        const curr = subset[j].v;
+                        const next = subset[j+1].v;
+                        // Is it a Peak OR a Valley?
+                        if ((curr > prev && curr > next) || (curr < prev && curr < next)) {
+                            nextEventIndex = j;
+                            break; // Stop at the very first one we find
+                        }
+                    }
+
+                    const labels = subset.map(p => p.t);
+                    const values = subset.map(p => p.v);
+                    const high = Math.max(...values);
+                    const low = Math.min(...values);
+
+                    // --- RENDER ---
+                    const card = document.createElement('div');
+                    card.className = 'bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 relative';
+                    
+                    // Dynamic Header Text
+                    let nextEventText = "Calculating...";
+                    if (nextEventIndex !== -1) {
+                         const eVal = values[nextEventIndex];
+                         const eType = eVal > values[nextEventIndex-1] ? "High Tide" : "Low Tide";
+                         const timeParts = labels[nextEventIndex].split(' ')[1].split(':');
+                         const h = parseInt(timeParts[0]);
+                         const displayTime = `${h % 12 || 12}:${timeParts[1]} ${h>=12?'PM':'AM'}`;
+                         nextEventText = `Next ${eType} at ${displayTime}`;
+                    }
+
                     card.innerHTML = `
-                        <div class="flex justify-between items-center mb-6">
-                            <h2 class="text-xl font-bold text-slate-800 leading-none">${station.name}</h2>
+                        <div class="flex justify-between items-end mb-4">
+                            <h2 class="text-xl font-bold text-slate-800">${station.name}</h2>
+                            <p class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">${nextEventText}</p>
                         </div>
                         <div class="relative h-64 w-full">
                             <canvas id="c-${i}"></canvas>
@@ -92,30 +147,7 @@ export const prerender = false;
                     `;
                     container.appendChild(card);
 
-                    // --- DATA PREP ---
-                    const labels = station.predictions.map(p => p.t);
-                    const values = station.predictions.map(p => p.v);
-                    const high = Math.max(...values);
-                    const low = Math.min(...values);
-
-                    // FIND "NOW" INDEX
-                    // We look for the data point closest to the current time
-                    const now = new Date();
-                    let nowIndex = 0;
-                    let minDiff = Infinity;
-                    
-                    station.predictions.forEach((p, idx) => {
-                        // Fix date string for Safari/iPhone (replace space with T or - with /)
-                        const pDate = new Date(p.t.replace(/-/g, '/')); 
-                        const diff = Math.abs(now - pDate);
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            nowIndex = idx;
-                        }
-                    });
-
                     const ctx = document.getElementById(`c-${i}`);
-
                     new Chart(ctx, {
                         type: 'line',
                         data: {
@@ -127,27 +159,28 @@ export const prerender = false;
                                 fill: true,
                                 backgroundColor: 'rgba(37, 99, 235, 0.04)',
                                 
-                                // THE MAGIC: Dynamic Colors based on "Now"
+                                // GRAY PAST / BLUE FUTURE
                                 segment: {
-                                    borderColor: ctx => ctx.p0DataIndex < nowIndex ? 'rgba(148, 163, 184, 0.5)' : '#2563eb',
-                                    borderDash: ctx => ctx.p0DataIndex < nowIndex ? [6, 6] : undefined,
+                                    borderColor: ctx => ctx.p0DataIndex < displayNowIndex ? 'rgba(148, 163, 184, 0.3)' : '#2563eb',
+                                    borderDash: ctx => ctx.p0DataIndex < displayNowIndex ? [4, 4] : undefined,
                                 },
 
-                                // THE DOTS:
-                                // Index == nowIndex ? ORANGE (Live)
-                                // High/Low ? Blue (Size 6)
-                                // Past ? Gray (Small)
+                                // DOT LOGIC
                                 pointRadius: (c) => {
                                     const idx = c.dataIndex;
                                     const v = c.dataset.data[idx];
-                                    if (idx === nowIndex) return 8; // LIVE DOT IS HUGE
-                                    if (v === high || v === low) return 5;
-                                    return 0; // Hide intermediate dots to reduce clutter
+                                    
+                                    if (idx === displayNowIndex) return 8; // ORANGE (Now)
+                                    if (idx === nextEventIndex) return 8;  // BLACK (Next Event)
+                                    if (v === high || v === low) return 5; // BLUE (Future Peaks)
+                                    return 0;
                                 },
                                 pointBackgroundColor: (c) => {
-                                    if (c.dataIndex === nowIndex) return '#f97316'; // Orange for Live
-                                    if (c.dataIndex < nowIndex) return '#cbd5e1'; // Gray for Past
-                                    return '#2563eb'; // Blue for Future
+                                    const idx = c.dataIndex;
+                                    if (idx === displayNowIndex) return '#f97316'; // Orange
+                                    if (idx === nextEventIndex) return '#0f172a'; // Black
+                                    if (idx < displayNowIndex) return '#cbd5e1';   // Gray
+                                    return '#2563eb'; // Blue
                                 },
                                 pointBorderColor: '#fff',
                                 pointBorderWidth: 3,
@@ -163,34 +196,27 @@ export const prerender = false;
                                     type: 'category',
                                     grid: { display: false },
                                     ticks: {
-                                        maxTicksLimit: 6,
-                                        color: (c) => c.index === nowIndex ? '#f97316' : '#94a3b8', // Color the "Now" label orange
-                                        font: (c) => c.index === nowIndex ? {weight:'bold', size:12} : {size:11},
+                                        maxTicksLimit: 7,
+                                        color: (c) => c.index === displayNowIndex ? '#f97316' : '#94a3b8',
+                                        font: (c) => c.index === displayNowIndex ? {weight:'bold'} : {size:11},
                                         callback: function(val, index) {
-                                            if (index === nowIndex) return "NOW"; // Force label to say "NOW"
+                                            if (index === displayNowIndex) return "NOW";
+                                            // Don't show label for the Black Dot to prevent overlap clutter
+                                            if (index === nextEventIndex) return ""; 
                                             
                                             const label = this.getLabelForValue(val);
                                             const time = label.split(' ')[1];
-                                            const [h, m] = time.split(':');
-                                            const hour = parseInt(h);
-                                            const ampm = hour >= 12 ? 'pm' : 'am';
-                                            return `${hour % 12 || 12}${ampm}`;
+                                            const h = parseInt(time.split(':')[0]);
+                                            return `${h % 12 || 12}${h >= 12 ? 'pm' : 'am'}`;
                                         }
                                     }
                                 },
-                                y: {
-                                    display: false, // Hide Y axis numbers (cleaner)
-                                    suggestedMin: low - 1,
-                                    suggestedMax: high + 1,
-                                }
+                                y: { display: false, suggestedMin: low - 1, suggestedMax: high + 1 }
                             }
                         }
                     });
                 });
-
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         }
         init();
     </script>
