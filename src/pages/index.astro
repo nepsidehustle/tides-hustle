@@ -10,22 +10,80 @@ export const prerender = false;
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background: #020617; color: #f8fafc; min-height: 100vh; font-family: sans-serif; }
-        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; }
+        body { 
+            background: #020617; 
+            color: #f8fafc; 
+            min-height: 100vh; 
+            font-family: ui-sans-serif, system-ui, sans-serif; 
+        }
+        .glass-card { 
+            background: rgba(255, 255, 255, 0.03); 
+            backdrop-filter: blur(12px); 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            border-radius: 24px; 
+        }
     </style>
 </head>
-<body class="p-8">
+<body class="p-6 md:p-12">
     <div class="max-w-6xl mx-auto">
-        <header class="mb-10">
-            <h1 class="text-3xl font-bold text-blue-400">TideTrack <span class="text-white font-light text-xl italic">Live Waves</span></h1>
+        <header class="mb-10 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-bold text-white tracking-tighter">
+                    Tide<span class="text-blue-400 font-light">Track</span>
+                </h1>
+                <p class="text-slate-500 text-xs uppercase tracking-widest mt-1">3-Day Prediction Wave</p>
+            </div>
+            <div id="clock" class="text-slate-400 font-mono text-sm"></div>
         </header>
 
-        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8 text-center">
-            <p id="loading" class="col-span-full py-20 text-slate-500 animate-pulse">Connecting to NOAA sensors...</p>
+        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div id="loader" class="col-span-full py-20 text-center text-slate-500 animate-pulse">
+                Fetching NOAA Data...
+            </div>
         </div>
     </div>
 
     <script>
+        // Plugin to draw the Vertical "Now" Line
+        const nowLinePlugin = {
+            id: 'nowLine',
+            afterDraw: (chart) => {
+                const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+                const now = new Date();
+                
+                // Find the index of the data point closest to "Now"
+                const labels = chart.data.labels;
+                let closestIndex = -1;
+                let minDiff = Infinity;
+
+                labels.forEach((label, i) => {
+                    const diff = Math.abs(new Date(label.replace(/-/g, "/")) - now);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = i;
+                    }
+                });
+
+                if (closestIndex !== -1) {
+                    const xPos = x.getPixelForValue(labels[closestIndex]);
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.setLineDash([5, 5]);
+                    ctx.moveTo(xPos, top);
+                    ctx.lineTo(xPos, bottom);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.stroke();
+                    
+                    // Draw "NOW" text
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                    ctx.font = '10px Arial';
+                    ctx.fillText('NOW', xPos - 10, top - 10);
+                    ctx.restore();
+                }
+            }
+        };
+
         async function init() {
             try {
                 const res = await fetch('/api/tide-data');
@@ -37,7 +95,7 @@ export const prerender = false;
                     const div = document.createElement('div');
                     div.className = 'glass-card p-6';
                     div.innerHTML = `
-                        <h2 class="text-xl font-bold mb-4 text-left">${station.name}</h2>
+                        <h2 class="text-xl font-bold mb-6">${station.name}</h2>
                         <div class="h-64"><canvas id="c-${i}"></canvas></div>
                     `;
                     container.appendChild(div);
@@ -47,71 +105,7 @@ export const prerender = false;
                     gradient.addColorStop(0, 'rgba(56, 189, 248, 0.4)');
                     gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
 
-                    // @ts-ignore
                     new Chart(ctx, {
                         type: 'line',
                         data: {
                             labels: station.predictions.map(p => p.t),
-                            datasets: [{
-                                data: station.predictions.map(p => p.v),
-                                borderColor: '#38bdf8',
-                                borderWidth: 3,
-                                fill: true,
-                                backgroundColor: gradient,
-                                tension: 0.4,
-                                pointRadius: 0
-                            }]
-                        },
-                       options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { 
-        legend: { display: false },
-        tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: '#1e293b',
-            callbacks: {
-                title: (items) => {
-                    const d = new Date(items[0].label.replace(/-/g, "/"));
-                    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                }
-            }
-        }
-    },
-    scales: {
-        x: { 
-            display: true, 
-            grid: { display: false },
-            ticks: { 
-                maxTicksLimit: 8, 
-                color: 'rgba(255,255,255,0.4)', 
-                font: { size: 10 },
-                callback: function(value) {
-                    const dateStr = this.getLabelForValue(value);
-                    const d = new Date(dateStr.replace(/-/g, "/"));
-                    // Shows "Fri 4 PM" or "Sat 10 AM"
-                    return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
-                }
-            }
-        },
-        y: { 
-            grid: { color: 'rgba(255,255,255,0.05)', drawTicks: false },
-            ticks: { 
-                color: 'rgba(255,255,255,0.4)', 
-                font: { size: 10 },
-                callback: (value) => value + 'ft'
-            }
-        }
-    }
-}
-                    });
-                });
-            } catch (err) {
-                console.error("Dashboard error:", err);
-            }
-        }
-        init();
-    </script>
-</body>
-</html>
