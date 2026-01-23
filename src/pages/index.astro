@@ -11,74 +11,104 @@ export const prerender = false;
 </head>
 <body class="bg-white text-slate-900 p-4 md:p-10 font-sans">
     <div class="max-w-6xl mx-auto">
-        <h1 class="text-3xl font-black italic tracking-tighter mb-8 text-blue-600">TideTrack <span class="text-slate-400">Pro</span></h1>
-        <div id="grid" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
+        <header class="mb-8 flex justify-between items-center">
+            <h1 class="text-3xl font-black italic tracking-tighter text-blue-600">TideTrack <span class="text-slate-400 font-normal">Pro</span></h1>
+            <button onclick="window.location.reload()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-full text-sm font-bold transition-colors">
+                Refresh Feed
+            </button>
+        </header>
+        
+        <div id="grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div id="loader" class="col-span-full py-20 text-center text-slate-400 animate-pulse">
+                Fetching maritime data...
+            </div>
+        </div>
     </div>
 
     <script>
         async function init() {
-            const res = await fetch('/api/tide-data');
-            const data = await res.json();
-            const container = document.getElementById('grid');
+            try {
+                // We are fetching the data you already have (Siri-proven data)
+                const res = await fetch('/api/tide-data');
+                const data = await res.json();
+                document.getElementById('loader').remove();
+                const container = document.getElementById('grid');
 
-            data.forEach((station, i) => {
-                const card = document.createElement('div');
-                card.className = 'border-2 border-slate-100 p-6 rounded-3xl shadow-sm';
-                card.innerHTML = `<h2 class="text-2xl font-bold mb-4">${station.name}</h2><div class="h-64"><canvas id="c-${i}"></canvas></div>`;
-                container.appendChild(card);
+                data.forEach((station, i) => {
+                    const card = document.createElement('div');
+                    card.className = 'border-2 border-slate-100 p-6 rounded-3xl shadow-sm bg-white';
+                    card.innerHTML = `
+                        <h2 class="text-2xl font-bold mb-4 text-slate-800">${station.name}</h2>
+                        <div class="h-64"><canvas id="c-${i}"></canvas></div>
+                    `;
+                    container.appendChild(card);
 
-                const labels = station.predictions.map(p => p.t);
-                const values = station.predictions.map(p => p.v);
-                const high = Math.max(...values);
-                const low = Math.min(...values);
+                    const labels = station.predictions.map(p => p.t);
+                    const values = station.predictions.map(p => p.v);
+                    const high = Math.max(...values);
+                    const low = Math.min(...values);
 
-                new Chart(document.getElementById(`c-${i}`), {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: values,
-                            borderColor: '#2563eb', // Nice deep blue
-                            borderWidth: 4,
-                            tension: 0.4,
-                            pointRadius: (ctx) => (values[ctx.dataIndex] === high || values[ctx.dataIndex] === low) ? 8 : 0,
-                            pointBackgroundColor: '#2563eb',
-                            fill: true,
-                            backgroundColor: 'rgba(37, 99, 235, 0.05)'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: {
-                                ticks: {
-                                    maxTicksLimit: 6,
-                                    callback: function(val) {
-                                        // "Fri 10 AM" style
-                                        const label = labels[val];
-                                        if (!label) return '';
-                                        const [dPart, tPart] = label.split(' ');
-                                        const [y, m, d] = dPart.split('-');
-                                        const date = new Date(y, m-1, d);
-                                        const hour = parseInt(tPart.split(':')[0]);
-                                        const ampm = hour >= 12 ? 'PM' : 'AM';
-                                        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                                        return `${days[date.getDay()]} ${hour % 12 || 12}${ampm}`;
-                                    }
-                                },
-                                grid: { display: false }
+                    new Chart(document.getElementById(`c-${i}`), {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: values,
+                                borderColor: '#2563eb', // Pro Blue
+                                borderWidth: 4,
+                                // TENSION is what makes it a wave rather than jagged points
+                                tension: 0.4, 
+                                // Point radius 0 hides the "dots" unless it's a peak
+                                pointRadius: (ctx) => (values[ctx.dataIndex] === high || values[ctx.dataIndex] === low) ? 6 : 0,
+                                pointBackgroundColor: '#2563eb',
+                                fill: true,
+                                backgroundColor: 'rgba(37, 99, 235, 0.05)'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { display: false },
+                                tooltip: {
+                                    mode: 'index',
+                                    intersect: false
+                                }
                             },
-                            y: {
-                                min: Math.floor(low) - 1,
-                                max: Math.ceil(high) + 1,
-                                border: { display: false }
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        maxTicksLimit: 6,
+                                        color: '#94a3b8',
+                                        callback: function(val) {
+                                            // Cleaning up the date for the 15-year-old/Siri style: "Fri 10AM"
+                                            const label = labels[val];
+                                            if (!label) return '';
+                                            const [dPart, tPart] = label.split(' ');
+                                            const [y, m, d] = dPart.split('-');
+                                            const date = new Date(y, m-1, d);
+                                            const hour = parseInt(tPart.split(':')[0]);
+                                            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                                            return `${days[date.getDay()]} ${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
+                                        }
+                                    },
+                                    grid: { display: false }
+                                },
+                                y: {
+                                    // Giving the wave some vertical "breathing room"
+                                    min: Math.floor(low) - 1,
+                                    max: Math.ceil(high) + 1,
+                                    ticks: { color: '#94a3b8' },
+                                    grid: { color: '#f1f5f9' },
+                                    border: { display: false }
+                                }
                             }
                         }
-                    }
+                    });
                 });
-            });
+            } catch (e) {
+                console.error("Dashboard failed:", e);
+            }
         }
         init();
     </script>
