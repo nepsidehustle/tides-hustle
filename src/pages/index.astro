@@ -9,7 +9,7 @@ export const prerender = false;
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     
-    <title>TideTrack Pro v3.1</title>
+    <title>TideTrack Pro v3.2</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,12 +27,12 @@ export const prerender = false;
 
     <div class="w-full max-w-3xl bg-white min-h-[80vh] rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border-[6px] border-white overflow-hidden flex flex-col relative">
         
-        <header class="px-8 pt-12 pb-6 bg-white z-10 flex flex-col items-center gap-3 text-center">
+        <header class="px-8 pt-12 pb-6 bg-white z-10 flex flex-col items-center text-center gap-3">
             <h1 class="text-5xl font-black text-slate-900 tracking-tighter">
                 Tide<span class="text-blue-600">Track</span>
             </h1>
             
-            <div class="flex items-center gap-3 bg-slate-50 px-5 py-2 rounded-full border border-slate-100">
+            <div class="flex items-center gap-3 bg-slate-50 px-5 py-2 rounded-full border border-slate-100 shadow-sm">
                 <span class="relative flex h-2.5 w-2.5">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
@@ -49,12 +49,12 @@ export const prerender = false;
             <div id="grid" class="flex flex-col gap-10">
                 <div id="status" class="py-24 flex flex-col items-center justify-center opacity-50">
                     <div class="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Scanning Satellites...</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Syncing NOAA Data...</p>
                 </div>
             </div>
         </main>
 
-        <footer class="px-8 py-10 bg-white border-t border-slate-50 flex flex-col items-center gap-6 z-10 text-center">
+        <footer class="px-8 py-10 bg-white border-t border-slate-50 flex flex-col items-center text-center gap-6 z-10">
             <button onclick="window.location.href=window.location.href" class="group relative px-10 py-4 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
                 Force Update
             </button>
@@ -62,10 +62,10 @@ export const prerender = false;
             <div class="max-w-xs mx-auto space-y-3">
                 <div class="flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-orange-500 shadow-sm"></span> Now</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-900 shadow-sm"></span> Next Event</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-900 shadow-sm"></span> High/Low</span>
                 </div>
                 <p class="text-[10px] leading-relaxed text-slate-300 font-medium pt-2 border-t border-slate-100">
-                    Build v3.1 • Educational Use Only.<br/>
+                    Build v3.2 • Educational Use Only.<br/>
                     <span class="text-rose-400 font-bold">NOT FOR NAVIGATION.</span>
                     <br/><span id="debug-info" class="text-slate-200">Waiting for diagnostics...</span>
                 </p>
@@ -81,7 +81,7 @@ export const prerender = false;
 
         async function init() {
             try {
-                // Fetch data (Cache buster to force fresh load from Cloudflare initially)
+                // Fetch data with cache bust
                 const apiUrl = '/api/tide-data?bust=' + Date.now();
                 const res = await fetch(apiUrl);
                 const container = document.getElementById('grid');
@@ -91,8 +91,7 @@ export const prerender = false;
                 
                 container.innerHTML = ''; 
 
-                // --- DIAGNOSTICS CHECK ---
-                // We check the "server_version" we added to the API.
+                // Diagnostics
                 if (fullData.length > 0) {
                     const sVer = fullData[0].server_version || "Old";
                     const count = fullData[0].predictions ? fullData[0].predictions.length : 0;
@@ -123,15 +122,22 @@ export const prerender = false;
                     const subset = station.predictions.slice(startIdx, endIdx);
                     const displayNowIndex = rawNowIndex - startIdx;
 
-                    // 2. FIND BLACK DOT (Event)
-                    let nextEventIndex = -1;
-                    for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
+                    // 2. FIND ALL EVENTS (Black Dots)
+                    const eventIndices = [];
+                    let firstEventIndex = -1;
+
+                    for (let j = 1; j < subset.length - 1; j++) {
                         const prev = subset[j-1].v;
                         const curr = subset[j].v;
                         const next = subset[j+1].v;
+                        
+                        // Check for Peak OR Valley
                         if ((curr > prev && curr > next) || (curr < prev && curr < next)) {
-                            nextEventIndex = j;
-                            break; 
+                            // Only count if it's in the future (or very close to now)
+                            if (j > displayNowIndex) {
+                                eventIndices.push(j);
+                                if (firstEventIndex === -1) firstEventIndex = j;
+                            }
                         }
                     }
 
@@ -141,12 +147,12 @@ export const prerender = false;
                     const high = Math.max(...values);
                     const low = Math.min(...values);
 
-                    // Badge Logic
+                    // Badge Text Logic (First Event Only)
                     let badgeText = "Trend Only";
-                    if (nextEventIndex !== -1) {
-                         const eVal = values[nextEventIndex];
-                         const eType = eVal > values[nextEventIndex-1] ? "High" : "Low";
-                         const tStr = labels[nextEventIndex].split(' ')[1];
+                    if (firstEventIndex !== -1) {
+                         const eVal = values[firstEventIndex];
+                         const eType = eVal > values[firstEventIndex-1] ? "High" : "Low";
+                         const tStr = labels[firstEventIndex].split(' ')[1];
                          const [hStr, mStr] = tStr.split(':');
                          let hour = parseInt(hStr);
                          const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -158,7 +164,7 @@ export const prerender = false;
                         badgeText = nextV > currentV ? "Rising" : "Falling";
                     }
 
-                    // 4. RENDER
+                    // 4. RENDER CARD
                     const card = document.createElement('div');
                     card.className = 'bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.06)] border border-slate-100 relative';
                     
@@ -192,16 +198,16 @@ export const prerender = false;
                                 },
                                 pointRadius: (c) => {
                                     const idx = c.dataIndex;
+                                    // 1. Live Dot
                                     if (idx === displayNowIndex) return 9; 
-                                    if (idx === nextEventIndex) return 9; 
-                                    const v = c.dataset.data[idx];
-                                    if ((v === high || v === low) && idx !== nextEventIndex) return 4; 
+                                    // 2. Event Dots (All Future Peaks)
+                                    if (eventIndices.includes(idx)) return 7; 
                                     return 0;
                                 },
                                 pointBackgroundColor: (c) => {
                                     const idx = c.dataIndex;
-                                    if (idx === displayNowIndex) return '#f97316';
-                                    if (idx === nextEventIndex) return '#1e293b';
+                                    if (idx === displayNowIndex) return '#f97316'; // Orange
+                                    if (eventIndices.includes(idx)) return '#1e293b'; // Black
                                     return '#3b82f6';
                                 },
                                 pointBorderColor: '#fff',
@@ -224,7 +230,9 @@ export const prerender = false;
                                         font: (c) => c.index === displayNowIndex ? {weight:'800', size:12} : {weight:'600', size:11},
                                         callback: function(val, index) {
                                             if (index === displayNowIndex) return "NOW";
-                                            if (index === nextEventIndex) return ""; 
+                                            // Hide label if it's a black dot to prevent clutter
+                                            if (eventIndices.includes(index)) return ""; 
+                                            
                                             const label = this.getLabelForValue(val);
                                             const time = label.split(' ')[1];
                                             const h = parseInt(time.split(':')[0]);
