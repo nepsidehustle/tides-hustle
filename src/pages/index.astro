@@ -62,18 +62,49 @@ export const prerender = false;
                                 pointRadius: 0
                             }]
                         },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { display: false },
-                                y: { 
-                                    grid: { color: 'rgba(255,255,255,0.05)' },
-                                    ticks: { color: '#64748b' }
-                                }
-                            }
-                        }
+                       options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { 
+        legend: { display: false },
+        tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: '#1e293b',
+            callbacks: {
+                title: (items) => {
+                    const d = new Date(items[0].label.replace(/-/g, "/"));
+                    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                }
+            }
+        }
+    },
+    scales: {
+        x: { 
+            display: true, 
+            grid: { display: false },
+            ticks: { 
+                maxTicksLimit: 8, 
+                color: 'rgba(255,255,255,0.4)', 
+                font: { size: 10 },
+                callback: function(value) {
+                    const dateStr = this.getLabelForValue(value);
+                    const d = new Date(dateStr.replace(/-/g, "/"));
+                    // Shows "Fri 4 PM" or "Sat 10 AM"
+                    return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
+                }
+            }
+        },
+        y: { 
+            grid: { color: 'rgba(255,255,255,0.05)', drawTicks: false },
+            ticks: { 
+                color: 'rgba(255,255,255,0.4)', 
+                font: { size: 10 },
+                callback: (value) => value + 'ft'
+            }
+        }
+    }
+}
                     });
                 });
             } catch (err) {
