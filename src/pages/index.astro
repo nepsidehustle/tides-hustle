@@ -21,51 +21,49 @@ export const prerender = false;
         </header>
 
         <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="py-20 text-center col-span-full text-slate-500 animate-pulse">Accessing NOAA Data...</div>
+            <div id="loading" class="col-span-full py-20 text-center text-slate-500 animate-pulse">Syncing with NOAA Sensors...</div>
         </div>
     </div>
 
     <script>
+        // Explanation for 15yo: This helper turns the NOAA date string into a real Date object
+        // that the chart can understand, regardless of if you're on a Mac, PC, or iPhone.
+        function parseNOAADate(dateStr) {
+            const [date, time] = dateStr.split(' ');
+            const [y, m, d] = date.split('-');
+            const [hr, min] = time.split(':');
+            return new Date(y, m - 1, d, hr, min);
+        }
+
         async function init() {
             try {
                 const res = await fetch('/api/tide-data');
                 const data = await res.json();
+                document.getElementById('loading').remove();
                 const container = document.getElementById('dashboard-grid');
-                container.innerHTML = '';
 
                 data.forEach((station, i) => {
                     const card = document.createElement('div');
                     card.className = 'glass-card p-6';
-                    card.innerHTML = `
-                        <h2 class="text-xl font-bold mb-4">${station.name}</h2>
-                        <div class="h-72 w-full"><canvas id="chart-${i}"></canvas></div>
-                    `;
+                    card.innerHTML = `<h2 class="text-xl font-bold mb-4">${station.name}</h2><div class="h-72"><canvas id="c-${i}"></canvas></div>`;
                     container.appendChild(card);
 
-                    const ctx = document.getElementById(`chart-${i}`).getContext('2d');
-                    
-                    // Explanation: We find the absolute High and Low in the 720 points 
-                    // so we can put a "Dot" on them as a reference.
-                    const values = station.predictions.map(p => p.v);
-                    const maxTide = Math.max(...values);
-                    const minTide = Math.min(...values);
+                    const vals = station.predictions.map(p => p.v);
+                    const high = Math.max(...vals);
+                    const low = Math.min(...vals);
 
-                    new Chart(ctx, {
+                    new Chart(document.getElementById(`c-${i}`), {
                         type: 'line',
                         data: {
                             labels: station.predictions.map(p => p.t),
                             datasets: [{
-                                data: values,
+                                data: vals,
                                 borderColor: '#38bdf8',
-                                borderWidth: 2,
+                                borderWidth: 3,
                                 fill: true,
                                 backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                                tension: 0.4, // This creates the curve
-                                pointRadius: (context) => {
-                                    // Explanation: Only show dots on High/Low peaks
-                                    const val = context.dataset.data[context.dataIndex];
-                                    return (val === maxTide || val === minTide) ? 5 : 0;
-                                },
+                                tension: 0.4,
+                                pointRadius: (ctx) => (vals[ctx.dataIndex] === high || vals[ctx.dataIndex] === low) ? 6 : 0,
                                 pointBackgroundColor: '#fff'
                             }]
                         },
@@ -78,7 +76,7 @@ export const prerender = false;
                                 tooltip: {
                                     callbacks: {
                                         title: (items) => {
-                                            const d = new Date(items[0].label.replace(/-/g, "/"));
+                                            const d = parseNOAADate(items[0].label);
                                             return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
                                         }
                                     }
@@ -86,40 +84,38 @@ export const prerender = false;
                             },
                             scales: {
                                 x: {
-                                    grid: { display: false },
                                     ticks: {
-                                        maxTicksLimit: 6, // Explanation: Only show 6 labels so it's not messy
-                                        color: '#64748b',
+                                        maxTicksLimit: 6,
                                         callback: function(val) {
-                                            const d = new Date(this.getLabelForValue(val).replace(/-/g, "/"));
+                                            const d = parseNOAADate(this.getLabelForValue(val));
                                             return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
-                                        }
-                                    }
+                                        },
+                                        color: '#64748b'
+                                    },
+                                    grid: { display: false }
                                 },
                                 y: {
-                                    // Explanation: Forces the chart to show at least -2 to 8 feet
-                                    // This prevents that "zoomed in" straight line look.
-                                    suggestedMin: -2,
-                                    suggestedMax: 8,
+                                    // Explanation: We don't hardcode numbers here anymore. 
+                                    // We tell the chart to "cushion" the actual wave by 1 foot top and bottom.
+                                    min: low - 1,
+                                    max: high + 1,
                                     grid: { color: 'rgba(255,255,255,0.05)' },
                                     ticks: { color: '#64748b' }
                                 }
                             }
                         },
-                        // Explanation: This is the "Hover Line" plugin
                         plugins: [{
-                            id: 'verticalLine',
+                            id: 'vLine',
                             afterDraw: (chart) => {
                                 if (chart.tooltip?._active?.length) {
                                     const x = chart.tooltip._active[0].element.x;
-                                    const yAxis = chart.scales.y;
-                                    const ctx = chart.ctx;
+                                    const {ctx, chartArea} = chart;
                                     ctx.save();
                                     ctx.beginPath();
-                                    ctx.moveTo(x, yAxis.top);
-                                    ctx.lineTo(x, yAxis.bottom);
+                                    ctx.moveTo(x, chartArea.top);
+                                    ctx.lineTo(x, chartArea.bottom);
                                     ctx.lineWidth = 1;
-                                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                                     ctx.stroke();
                                     ctx.restore();
                                 }
@@ -127,7 +123,7 @@ export const prerender = false;
                         }]
                     });
                 });
-            } catch (err) { console.error(err); }
+            } catch (e) { console.error(e); }
         }
         init();
     </script>
