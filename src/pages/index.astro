@@ -49,11 +49,22 @@ export const prerender = false;
             </div>
         </main>
 
-        <footer class="p-4 bg-white border-t border-slate-100 flex justify-center">
-             <button onclick="window.location.reload()" class="group relative px-6 py-3 font-bold text-white transition-all duration-200 bg-slate-900 rounded-full hover:bg-blue-600 shadow-lg hover:shadow-blue-500/30 active:scale-95 text-sm">
-                Refresh Dashboard
-            </button>
-        </footer>
+       <footer class="px-6 py-6 bg-slate-50 border-t border-slate-100 flex flex-col items-center gap-6">
+    
+    <button onclick="window.location.reload()" class="group relative px-6 py-3 font-bold text-white transition-all duration-200 bg-slate-900 rounded-full hover:bg-blue-600 shadow-lg hover:shadow-blue-500/30 active:scale-95 text-sm">
+        Refresh Dashboard
+    </button>
+
+    <div class="text-[10px] leading-relaxed text-center text-slate-400 max-w-sm mx-auto border-t border-slate-200/60 pt-4">
+        <p class="font-bold mb-1 text-slate-500">EDUCATIONAL USE ONLY</p>
+        <p>
+            Data provided by NOAA CO-OPS but not guaranteed. 
+            <span class="text-red-400 font-medium">NOT FOR NAVIGATION.</span> 
+            Do not use for boating, sailing, or safety decisions. 
+            No claim is made as to the accuracy or timeliness of this data.
+        </p>
+    </div>
+</footer>
     </div>
 
     <script>

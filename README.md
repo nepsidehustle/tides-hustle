@@ -153,4 +153,17 @@ To track a new location, edit `src/pages/api/tide-data.ts` AND `src/pages/api/ti
 
 ---
 
+
+## ⚖️ Legal & Safety Disclaimer
+
+**IMPORTANT: NOT FOR NAVIGATION.**
+
+This application is strictly for **educational and demonstrational purposes only**. 
+
+* **No Accuracy Guarantee:** While this application uses data from NOAA CO-OPS, it is not an official navigation tool. Data may be delayed, cached, or rendered incorrectly due to software errors.
+* **Not for Boating/Sailing:** Do not rely on TideTrack Pro for maritime navigation, anchoring, or safety decisions. Always consult official tide tables and certified navigational charts.
+* **NOAA Affiliation:** This project is an independent open-source tool and is not affiliated with, endorsed by, or operated by the National Oceanic and Atmospheric Administration (NOAA).
+
+**By using this software, you agree that the developers hold no liability for any accidents, damages, or losses resulting from the use of this data.**
+
 *Built with 🧂 Salt Water and TypeScript.*
