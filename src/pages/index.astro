@@ -8,122 +8,71 @@ export const prerender = false;
     <title>TideTrack Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background: #020617; color: #f8fafc; min-height: 100vh; font-family: sans-serif; }
-        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1.5rem; }
-    </style>
 </head>
-<body class="p-4 md:p-10">
+<body class="bg-slate-950 text-white p-4 md:p-10">
     <div class="max-w-6xl mx-auto">
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-white">Tide<span class="text-blue-400">Track</span> Pro</h1>
-            <p class="text-slate-500 text-sm">High-Resolution 72-Hour Wave</p>
-        </header>
-
-        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div id="loading" class="col-span-full py-20 text-center text-slate-500 animate-pulse">Syncing with NOAA Sensors...</div>
-        </div>
+        <h1 class="text-3xl font-bold mb-8">Tide<span class="text-blue-400">Track</span> Pro</h1>
+        <div id="grid" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
     </div>
 
     <script>
-        // Explanation for 15yo: This helper turns the NOAA date string into a real Date object
-        // that the chart can understand, regardless of if you're on a Mac, PC, or iPhone.
-        function parseNOAADate(dateStr) {
-            const [date, time] = dateStr.split(' ');
-            const [y, m, d] = date.split('-');
-            const [hr, min] = time.split(':');
-            return new Date(y, m - 1, d, hr, min);
-        }
-
         async function init() {
-            try {
-                const res = await fetch('/api/tide-data');
-                const data = await res.json();
-                document.getElementById('loading').remove();
-                const container = document.getElementById('dashboard-grid');
+            const res = await fetch('/api/tide-data');
+            const data = await res.json();
+            const container = document.getElementById('grid');
 
-                data.forEach((station, i) => {
-                    const card = document.createElement('div');
-                    card.className = 'glass-card p-6';
-                    card.innerHTML = `<h2 class="text-xl font-bold mb-4">${station.name}</h2><div class="h-72"><canvas id="c-${i}"></canvas></div>`;
-                    container.appendChild(card);
+            data.forEach((station, i) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white/5 border border-white/10 p-6 rounded-3xl';
+                card.innerHTML = `<h2 class="text-xl font-bold mb-4">${station.name}</h2><div class="h-64"><canvas id="c-${i}"></canvas></div>`;
+                container.appendChild(card);
 
-                    const vals = station.predictions.map(p => p.v);
-                    const high = Math.max(...vals);
-                    const low = Math.min(...vals);
+                const pts = station.predictions.map(p => ({
+                    // Explanation: We replace the dash with a slash to make iPhones happy
+                    x: new Date(p.t.replace(/-/g, "/")).getTime(),
+                    y: p.v
+                }));
 
-                    new Chart(document.getElementById(`c-${i}`), {
-                        type: 'line',
-                        data: {
-                            labels: station.predictions.map(p => p.t),
-                            datasets: [{
-                                data: vals,
-                                borderColor: '#38bdf8',
-                                borderWidth: 3,
-                                fill: true,
-                                backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                                tension: 0.4,
-                                pointRadius: (ctx) => (vals[ctx.dataIndex] === high || vals[ctx.dataIndex] === low) ? 6 : 0,
-                                pointBackgroundColor: '#fff'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: { mode: 'index', intersect: false },
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    callbacks: {
-                                        title: (items) => {
-                                            const d = parseNOAADate(items[0].label);
-                                            return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-                                        }
-                                    }
+                const vals = pts.map(p => p.y);
+                const high = Math.max(...vals);
+                const low = Math.min(...vals);
+
+                new Chart(document.getElementById(`c-${i}`), {
+                    type: 'line',
+                    data: { datasets: [{
+                        data: pts,
+                        borderColor: '#38bdf8',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        pointRadius: (ctx) => (pts[ctx.dataIndex]?.y === high || pts[ctx.dataIndex]?.y === low) ? 6 : 0,
+                        pointBackgroundColor: '#fff',
+                        fill: true,
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)'
+                    }]},
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: {
+                                type: 'linear', // THE FIX: Treats the X-axis as a timeline, not just text
+                                ticks: {
+                                    callback: (val) => {
+                                        const d = new Date(val);
+                                        return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
+                                    },
+                                    color: '#64748b'
                                 }
                             },
-                            scales: {
-                                x: {
-                                    ticks: {
-                                        maxTicksLimit: 6,
-                                        callback: function(val) {
-                                            const d = parseNOAADate(this.getLabelForValue(val));
-                                            return d.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
-                                        },
-                                        color: '#64748b'
-                                    },
-                                    grid: { display: false }
-                                },
-                                y: {
-                                    // Explanation: We don't hardcode numbers here anymore. 
-                                    // We tell the chart to "cushion" the actual wave by 1 foot top and bottom.
-                                    min: low - 1,
-                                    max: high + 1,
-                                    grid: { color: 'rgba(255,255,255,0.05)' },
-                                    ticks: { color: '#64748b' }
-                                }
+                            y: { 
+                                min: Math.floor(low) - 1, 
+                                max: Math.ceil(high) + 1,
+                                grid: { color: 'rgba(255,255,255,0.05)' } 
                             }
-                        },
-                        plugins: [{
-                            id: 'vLine',
-                            afterDraw: (chart) => {
-                                if (chart.tooltip?._active?.length) {
-                                    const x = chart.tooltip._active[0].element.x;
-                                    const {ctx, chartArea} = chart;
-                                    ctx.save();
-                                    ctx.beginPath();
-                                    ctx.moveTo(x, chartArea.top);
-                                    ctx.lineTo(x, chartArea.bottom);
-                                    ctx.lineWidth = 1;
-                                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                                    ctx.stroke();
-                                    ctx.restore();
-                                }
-                            }
-                        }]
-                    });
+                        }
+                    }
                 });
-            } catch (e) { console.error(e); }
+            });
         }
         init();
     </script>
