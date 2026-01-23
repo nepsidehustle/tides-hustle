@@ -1,1 +1,123 @@
-<h1>Tide API is Live</h1>
+---
+// src/pages/index.astro
+---
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TideTrack Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background: radial-gradient(circle at top right, #1e293b, #020617);
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-12">
+            <h1 class="text-4xl font-extralight tracking-tighter italic text-blue-400">
+                Tide<span class="font-black not-italic text-white">Track</span>
+            </h1>
+            <p class="text-slate-500 font-medium">72-Hour Wave Predictions</p>
+        </header>
+
+        <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="text-slate-400 animate-pulse">Scanning sensors...</div>
+        </div>
+    </div>
+
+    <script>
+        async function buildDashboard() {
+            try {
+                const response = await fetch('/api/tide-data');
+                const stations = await response.json();
+                const container = document.getElementById('dashboard-grid');
+                container.innerHTML = ''; // Clear loading state
+
+                stations.forEach((station, index) => {
+                    // 1. Create the Card
+                    const card = document.createElement('div');
+                    card.className = 'glass-card p-8 flex flex-col';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 class="text-2xl font-semibold">${station.name}</h2>
+                                <p class="text-xs text-slate-500 uppercase tracking-widest mt-1">NOAA Prediction Model</p>
+                            </div>
+                            <div class="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/20">
+                                3 DAY VIEW
+                            </div>
+                        </div>
+                        <div class="h-64 w-full mt-auto">
+                            <canvas id="canvas-${index}"></canvas>
+                        </div>
+                    `;
+                    container.appendChild(card);
+
+                    // 2. Setup the Wave Chart
+                    const ctx = document.getElementById(`canvas-${index}`).getContext('2d');
+                    
+                    // Create a subtle blue gradient for the area under the wave
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.3)');
+                    gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
+
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: station.predictions.map(p => p.t.split(' ')[1]), // Extract HH:MM
+                            datasets: [{
+                                data: station.predictions.map(p => p.v),
+                                borderColor: '#38bdf8',
+                                borderWidth: 3,
+                                fill: true,
+                                backgroundColor: gradient,
+                                tension: 0.4, // This creates the smooth "Ocean Wave" look
+                                pointRadius: 0, // Hides the dots
+                                pointHitRadius: 20
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    backgroundColor: '#0f172a',
+                                    titleColor: '#38bdf8',
+                                    callbacks: { label: (ctx) => `Depth: ${ctx.parsed.y} ft` }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { color: '#64748b', maxTicksLimit: 6 }
+                                },
+                                y: {
+                                    grid: { color: 'rgba(255,255,255,0.05)' },
+                                    ticks: { color: '#64748b' }
+                                }
+                            }
+                        }
+                    });
+                });
+            } catch (e) {
+                document.getElementById('dashboard-grid').innerHTML = '<p class="text-red-400 text-sm">Offline: Could not connect to TideStream API.</p>';
+            }
+        }
+
+        buildDashboard();
+    </script>
+</body>
+</html>
