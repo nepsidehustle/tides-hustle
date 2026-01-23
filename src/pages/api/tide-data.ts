@@ -9,9 +9,8 @@ export async function GET() {
   try {
     const allData = await Promise.all(
       stations.map(async (site) => {
-        // CHANGED: range=96 (4 Days). 
-        // This ensures the chart always has 48+ hours of future data to draw.
-        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=96&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
+        // FORCE REFRESH: range=96 AND a random number at the end
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=96&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&nocache=${Date.now()}`;
         
         const res = await fetch(api);
         const json = await res.json();

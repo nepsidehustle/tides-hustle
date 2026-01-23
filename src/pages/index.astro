@@ -9,7 +9,7 @@ export const prerender = false;
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     
-    <title>TideTrack Pro v2.5</title>
+    <title>TideTrack Pro v3.0</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,14 +21,18 @@ export const prerender = false;
     <style>
         body { font-family: 'Outfit', sans-serif; }
         ::-webkit-scrollbar { width: 0px; background: transparent; }
+        
+        /* HARDCODED CENTERING UTILS */
+        .center-flex { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .center-text { text-align: center; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen p-4 md:p-8 flex justify-center items-center">
 
     <div class="w-full max-w-3xl bg-white min-h-[80vh] rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border-[6px] border-white overflow-hidden flex flex-col relative">
         
-        <header class="px-8 pt-12 pb-6 bg-white z-10 flex flex-col items-center gap-3">
-            <h1 class="text-5xl font-black text-slate-900 tracking-tighter">
+        <header class="px-8 pt-12 pb-6 bg-white z-10 center-flex gap-3">
+            <h1 class="text-5xl font-black text-slate-900 tracking-tighter center-text">
                 Tide<span class="text-blue-600">Track</span>
             </h1>
             
@@ -47,26 +51,27 @@ export const prerender = false;
 
         <main class="flex-1 bg-slate-50/50 p-6 md:p-10">
             <div id="grid" class="flex flex-col gap-10">
-                <div id="status" class="py-24 text-center flex flex-col items-center justify-center opacity-50">
+                <div id="status" class="py-24 center-flex opacity-50">
                     <div class="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Scanning Satellites...</p>
                 </div>
             </div>
         </main>
 
-        <footer class="px-8 py-10 bg-white border-t border-slate-50 flex flex-col items-center gap-6 z-10">
+        <footer class="px-8 py-10 bg-white border-t border-slate-50 center-flex gap-6 z-10">
             <button onclick="window.location.href=window.location.href" class="group relative px-10 py-4 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
                 Force Update
             </button>
             
-            <div class="text-center max-w-xs mx-auto space-y-3">
+            <div class="center-text max-w-xs mx-auto space-y-3">
                 <div class="flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-orange-500 shadow-sm"></span> Now</span>
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-900 shadow-sm"></span> Next Event</span>
                 </div>
                 <p class="text-[10px] leading-relaxed text-slate-300 font-medium pt-2 border-t border-slate-100">
-                    Build v2.5 • Educational Use Only.<br/>
+                    Build v3.0 • Educational Use Only.<br/>
                     <span class="text-rose-400 font-bold">NOT FOR NAVIGATION.</span>
+                    <br/><span id="debug-info" class="text-slate-200">Waiting for data...</span>
                 </p>
             </div>
         </footer>
@@ -80,14 +85,21 @@ export const prerender = false;
 
         async function init() {
             try {
-                // FORCE FRESH DATA
-                const apiUrl = '/api/tide-data?cache_bust=' + Math.random();
+                // 1. FETCH
+                const apiUrl = '/api/tide-data?bust=' + Date.now();
                 const res = await fetch(apiUrl);
-                
                 const container = document.getElementById('grid');
+                
                 if (!res.ok) throw new Error("Server Unavailable");
                 const fullData = await res.json();
+                
                 container.innerHTML = ''; 
+
+                // 2. CHECK DATA LENGTH (Debug)
+                if (fullData.length > 0 && fullData[0].predictions) {
+                    const count = fullData[0].predictions.length;
+                    document.getElementById('debug-info').innerText = 'Diagnostics: Loaded ' + count + ' hours of data.';
+                }
 
                 fullData.forEach((station, i) => {
                     if (station.error || !station.predictions || station.predictions.length === 0) {
@@ -95,7 +107,7 @@ export const prerender = false;
                         return;
                     }
 
-                    // 1. WINDOWING
+                    // 3. WINDOWING
                     const now = new Date();
                     let rawNowIndex = 0;
                     let minDiff = Infinity;
@@ -113,7 +125,7 @@ export const prerender = false;
                     const subset = station.predictions.slice(startIdx, endIdx);
                     const displayNowIndex = rawNowIndex - startIdx;
 
-                    // 2. FIND NEXT EVENT (Black Dot)
+                    // 4. FIND BLACK DOT
                     let nextEventIndex = -1;
                     for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
                         const prev = subset[j-1].v;
@@ -125,13 +137,13 @@ export const prerender = false;
                         }
                     }
 
-                    // 3. DATA PREP
+                    // 5. CHART DATA
                     const labels = subset.map(p => p.t);
                     const values = subset.map(p => p.v);
                     const high = Math.max(...values);
                     const low = Math.min(...values);
 
-                    // Badge Text Logic
+                    // Badge Logic
                     let badgeText = "Trend Only";
                     if (nextEventIndex !== -1) {
                          const eVal = values[nextEventIndex];
@@ -148,12 +160,12 @@ export const prerender = false;
                         badgeText = nextV > currentV ? "Rising" : "Falling";
                     }
 
-                    // 4. RENDER
+                    // 6. RENDER CARD
                     const card = document.createElement('div');
                     card.className = 'bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.06)] border border-slate-100 relative';
                     
                     card.innerHTML = `
-                        <div class="flex flex-col items-center mb-6 text-center">
+                        <div class="center-flex mb-6 text-center">
                             <h2 class="text-3xl font-bold text-slate-800 tracking-tight mb-2">${station.name}</h2>
                             <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
                                 ${badgeText}
@@ -184,7 +196,6 @@ export const prerender = false;
                                     const idx = c.dataIndex;
                                     if (idx === displayNowIndex) return 9; 
                                     if (idx === nextEventIndex) return 9; 
-                                    
                                     const v = c.dataset.data[idx];
                                     if ((v === high || v === low) && idx !== nextEventIndex) return 4; 
                                     return 0;
