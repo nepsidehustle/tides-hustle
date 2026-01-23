@@ -9,7 +9,6 @@ export const prerender = false;
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom "Slick" Scrollbar for that premium feel */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -26,15 +25,14 @@ export const prerender = false;
                 </h1>
                 <div class="flex items-center gap-2 mt-1">
                     <span class="relative flex h-2 w-2">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
                     </span>
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Live Feed
+                        Live Dashboard
                     </p>
                 </div>
             </div>
-            
             <div class="text-right">
                 <div id="clock" class="text-xl font-mono font-bold text-slate-600 tracking-tight">--:--</div>
             </div>
@@ -44,31 +42,23 @@ export const prerender = false;
             <div id="grid" class="grid grid-cols-1 gap-6">
                 <div id="status" class="py-20 text-center flex flex-col items-center justify-center opacity-60">
                     <div class="h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p class="text-sm font-bold text-slate-400 uppercase tracking-wide">Syncing Data...</p>
+                    <p class="text-sm font-bold text-slate-400 uppercase tracking-wide">Locating Tides...</p>
                 </div>
             </div>
         </main>
 
-       <footer class="px-6 py-6 bg-slate-50 border-t border-slate-100 flex flex-col items-center gap-6">
-    
-    <button onclick="window.location.reload()" class="group relative px-6 py-3 font-bold text-white transition-all duration-200 bg-slate-900 rounded-full hover:bg-blue-600 shadow-lg hover:shadow-blue-500/30 active:scale-95 text-sm">
-        Refresh Dashboard
-    </button>
-
-    <div class="text-[10px] leading-relaxed text-center text-slate-400 max-w-sm mx-auto border-t border-slate-200/60 pt-4">
-        <p class="font-bold mb-1 text-slate-500">EDUCATIONAL USE ONLY</p>
-        <p>
-            Data provided by NOAA CO-OPS but not guaranteed. 
-            <span class="text-red-400 font-medium">NOT FOR NAVIGATION.</span> 
-            Do not use for boating, sailing, or safety decisions. 
-            No claim is made as to the accuracy or timeliness of this data.
-        </p>
-    </div>
-</footer>
+        <footer class="px-6 py-6 bg-slate-50 border-t border-slate-100 flex flex-col items-center gap-6">
+            <button onclick="window.location.reload()" class="group relative px-6 py-3 font-bold text-white transition-all duration-200 bg-slate-900 rounded-full hover:bg-blue-600 shadow-lg hover:shadow-blue-500/30 active:scale-95 text-sm">
+                Refresh Dashboard
+            </button>
+            <div class="text-[10px] leading-relaxed text-center text-slate-400 max-w-sm mx-auto pt-2">
+                <p>Gray line = Past. Blue line = Forecast.</p>
+                <p class="mt-1">EDUCATIONAL USE ONLY. <span class="text-red-400 font-medium">NOT FOR NAVIGATION.</span></p>
+            </div>
+        </footer>
     </div>
 
     <script>
-        // Clock
         setInterval(() => {
             document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }, 1000);
@@ -81,7 +71,7 @@ export const prerender = false;
                 if (!res.ok) throw new Error("Server Unavailable");
                 const data = await res.json();
                 
-                container.innerHTML = ''; // Clear loader
+                container.innerHTML = ''; 
 
                 data.forEach((station, i) => {
                     if (station.error || !station.predictions || station.predictions.length === 0) {
@@ -89,28 +79,41 @@ export const prerender = false;
                         return;
                     }
 
-                    // --- THE CARD DESIGN ---
                     const card = document.createElement('div');
-                    // This is the specific styling for the cards:
-                    card.className = 'bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 relative transition-all duration-300 hover:shadow-xl hover:-translate-y-1';
+                    card.className = 'bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 relative transition-all duration-300 hover:shadow-xl';
                     
                     card.innerHTML = `
                         <div class="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 class="text-xl font-bold text-slate-800 leading-none">${station.name}</h2>
-                            </div>
+                            <h2 class="text-xl font-bold text-slate-800 leading-none">${station.name}</h2>
                         </div>
-                        <div class="relative h-56 w-full">
+                        <div class="relative h-64 w-full">
                             <canvas id="c-${i}"></canvas>
                         </div>
                     `;
                     container.appendChild(card);
 
-                    // --- CHART LOGIC (UNTOUCHED) ---
+                    // --- DATA PREP ---
                     const labels = station.predictions.map(p => p.t);
                     const values = station.predictions.map(p => p.v);
                     const high = Math.max(...values);
                     const low = Math.min(...values);
+
+                    // FIND "NOW" INDEX
+                    // We look for the data point closest to the current time
+                    const now = new Date();
+                    let nowIndex = 0;
+                    let minDiff = Infinity;
+                    
+                    station.predictions.forEach((p, idx) => {
+                        // Fix date string for Safari/iPhone (replace space with T or - with /)
+                        const pDate = new Date(p.t.replace(/-/g, '/')); 
+                        const diff = Math.abs(now - pDate);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            nowIndex = idx;
+                        }
+                    });
+
                     const ctx = document.getElementById(`c-${i}`);
 
                     new Chart(ctx, {
@@ -119,19 +122,35 @@ export const prerender = false;
                             labels: labels,
                             datasets: [{
                                 data: values,
-                                borderColor: '#2563eb', // Blue-600
                                 borderWidth: 3,
                                 tension: 0.4,
-                                pointRadius: (c) => {
-                                    const v = c.dataset.data[c.dataIndex];
-                                    return (v === high || v === low) ? 5 : 2;
-                                },
-                                pointHoverRadius: 8,
-                                pointBackgroundColor: '#2563eb',
-                                pointBorderColor: '#fff',
-                                pointBorderWidth: 2,
                                 fill: true,
-                                backgroundColor: 'rgba(37, 99, 235, 0.04)' // Very subtle fill
+                                backgroundColor: 'rgba(37, 99, 235, 0.04)',
+                                
+                                // THE MAGIC: Dynamic Colors based on "Now"
+                                segment: {
+                                    borderColor: ctx => ctx.p0DataIndex < nowIndex ? 'rgba(148, 163, 184, 0.5)' : '#2563eb',
+                                    borderDash: ctx => ctx.p0DataIndex < nowIndex ? [6, 6] : undefined,
+                                },
+
+                                // THE DOTS:
+                                // Index == nowIndex ? ORANGE (Live)
+                                // High/Low ? Blue (Size 6)
+                                // Past ? Gray (Small)
+                                pointRadius: (c) => {
+                                    const idx = c.dataIndex;
+                                    const v = c.dataset.data[idx];
+                                    if (idx === nowIndex) return 8; // LIVE DOT IS HUGE
+                                    if (v === high || v === low) return 5;
+                                    return 0; // Hide intermediate dots to reduce clutter
+                                },
+                                pointBackgroundColor: (c) => {
+                                    if (c.dataIndex === nowIndex) return '#f97316'; // Orange for Live
+                                    if (c.dataIndex < nowIndex) return '#cbd5e1'; // Gray for Past
+                                    return '#2563eb'; // Blue for Future
+                                },
+                                pointBorderColor: '#fff',
+                                pointBorderWidth: 3,
                             }]
                         },
                         options: {
@@ -144,12 +163,13 @@ export const prerender = false;
                                     type: 'category',
                                     grid: { display: false },
                                     ticks: {
-                                        maxTicksLimit: 5,
-                                        color: '#cbd5e1', // Lighter text for cleaner look
-                                        font: { size: 11, weight: 'bold' },
-                                        callback: function(val) {
+                                        maxTicksLimit: 6,
+                                        color: (c) => c.index === nowIndex ? '#f97316' : '#94a3b8', // Color the "Now" label orange
+                                        font: (c) => c.index === nowIndex ? {weight:'bold', size:12} : {size:11},
+                                        callback: function(val, index) {
+                                            if (index === nowIndex) return "NOW"; // Force label to say "NOW"
+                                            
                                             const label = this.getLabelForValue(val);
-                                            if (!label) return "";
                                             const time = label.split(' ')[1];
                                             const [h, m] = time.split(':');
                                             const hour = parseInt(h);
@@ -159,11 +179,9 @@ export const prerender = false;
                                     }
                                 },
                                 y: {
+                                    display: false, // Hide Y axis numbers (cleaner)
                                     suggestedMin: low - 1,
                                     suggestedMax: high + 1,
-                                    border: { display: false },
-                                    grid: { color: '#f8fafc' }, // Ultra subtle grid
-                                    ticks: { display: false } // Hide Y-axis numbers for cleaner look
                                 }
                             }
                         }
