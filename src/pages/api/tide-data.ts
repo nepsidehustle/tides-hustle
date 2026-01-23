@@ -9,31 +9,31 @@ export async function GET() {
   try {
     const allData = await Promise.all(
       stations.map(async (site) => {
-        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
+        // We use date=latest and range=72 to get 3 days starting FROM NOW
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
         
         const res = await fetch(api);
         const json = await res.json();
 
-        // --- NEW LOGIC STARTS HERE ---
+        if (!json.predictions) return { name: site.name, predictions: [] };
+
         const now = new Date();
         const nowTimestamp = now.getTime();
 
         return {
           name: site.name,
-          // We filter out any hours that have already passed today
+          // Filter out only the stuff that is more than 1 hour old
+          // This keeps the 71 hours of future "wave" intact
           predictions: json.predictions
             .filter((p: any) => {
-              // Convert NOAA time string "YYYY-MM-DD HH:MM" to a timestamp
-              const predictionTime = new Date(p.t.replace(/-/g, "/")).getTime(); 
-              // Only keep data from 1 hour ago onwards (to show the immediate trend)
-              return predictionTime > (nowTimestamp - 3600000);
+              const pTime = new Date(p.t.replace(/-/g, "/")).getTime();
+              return pTime > (nowTimestamp - 3600000);
             })
             .map((p: any) => ({
               t: p.t,
               v: parseFloat(p.v)
             }))
         };
-        // --- NEW LOGIC ENDS HERE ---
       })
     );
 
@@ -45,6 +45,6 @@ export async function GET() {
       }
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: "Failed to fetch dashboard data" }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Wave fetch failed" }), { status: 500 });
   }
 }
