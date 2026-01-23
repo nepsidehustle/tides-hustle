@@ -1,5 +1,6 @@
 ---
 // src/pages/index.astro
+export const prerender = false;
 ---
 <html lang="en">
 <head>
@@ -10,114 +11,141 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { 
-            background: radial-gradient(circle at top right, #1e293b, #020617);
-            color: #f8fafc;
-            min-height: 100vh;
+            background: #020617; 
+            background-image: radial-gradient(circle at 50% -20%, #1e293b, #020617);
+            color: #f8fafc; 
+            min-height: 100vh; 
+            font-family: ui-sans-serif, system-ui, sans-serif; 
         }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 24px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        .glass-card { 
+            background: rgba(255, 255, 255, 0.03); 
+            backdrop-filter: blur(12px); 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            border-radius: 24px; 
+            transition: transform 0.3s ease;
+        }
+        .glass-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(56, 189, 248, 0.4);
         }
     </style>
 </head>
 <body class="p-6 md:p-12">
-    <div class="max-w-7xl mx-auto">
-        <header class="mb-12">
-            <h1 class="text-4xl font-extralight tracking-tighter italic text-blue-400">
-                Tide<span class="font-black not-italic text-white">Track</span>
-            </h1>
-            <p class="text-slate-500 font-medium">72-Hour Wave Predictions</p>
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-4xl font-black tracking-tighter text-white">
+                    Tide<span class="text-blue-400">Track</span>
+                </h1>
+                <p class="text-slate-500 font-medium uppercase tracking-widest text-xs mt-1">Live Maritime Intelligence</p>
+            </div>
+            <div class="text-right">
+                <p id="current-time" class="text-slate-400 text-sm font-mono"></p>
+            </div>
         </header>
 
         <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div class="text-slate-400 animate-pulse">Scanning sensors...</div>
+            <div id="loader" class="col-span-full py-20 text-center">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mb-4"></div>
+                <p class="text-slate-500 animate-pulse">Synchronizing with NOAA Deep-Sea Sensors...</p>
+            </div>
         </div>
     </div>
 
     <script>
-        async function buildDashboard() {
-            try {
-                const response = await fetch('/api/tide-data');
-                const stations = await response.json();
-                const container = document.getElementById('dashboard-grid');
-                container.innerHTML = ''; // Clear loading state
+        // Update the clock
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('current-time').innerText = now.toLocaleTimeString();
+        }, 1000);
 
-                stations.forEach((station, index) => {
-                    // 1. Create the Card
-                    const card = document.createElement('div');
-                    card.className = 'glass-card p-8 flex flex-col';
-                    card.innerHTML = `
-                        <div class="flex justify-between items-start mb-6">
+        async function initDashboard() {
+            try {
+                const res = await fetch('/api/tide-data');
+                const stations = await res.json();
+                
+                const container = document.getElementById('dashboard-grid');
+                container.innerHTML = ''; // Clear loader
+
+                stations.forEach((station, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'glass-card p-8 shadow-2xl';
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start mb-8">
                             <div>
-                                <h2 class="text-2xl font-semibold">${station.name}</h2>
-                                <p class="text-xs text-slate-500 uppercase tracking-widest mt-1">NOAA Prediction Model</p>
+                                <h2 class="text-2xl font-bold text-white">${station.name}</h2>
+                                <p class="text-xs text-slate-500 uppercase tracking-widest">72-Hour Prediction Model</p>
                             </div>
-                            <div class="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/20">
-                                3 DAY VIEW
-                            </div>
+                            <div class="h-2 w-2 rounded-full bg-blue-400 animate-ping"></div>
                         </div>
-                        <div class="h-64 w-full mt-auto">
-                            <canvas id="canvas-${index}"></canvas>
+                        <div class="h-64 relative">
+                            <canvas id="chart-${i}"></canvas>
+                        </div>
+                        <div class="mt-6 flex justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest border-t border-white/5 pt-4">
+                            <span>Now</span>
+                            <span>+24h</span>
+                            <span>+48h</span>
+                            <span>+72h</span>
                         </div>
                     `;
-                    container.appendChild(card);
+                    container.appendChild(div);
 
-                    // 2. Setup the Wave Chart
-                    const ctx = document.getElementById(`canvas-${index}`).getContext('2d');
+                    const ctx = document.getElementById(`chart-${i}`).getContext('2d');
                     
-                    // Create a subtle blue gradient for the area under the wave
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.3)');
+                    // Create a beautiful blue gradient for the wave fill
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 250);
+                    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.4)');
                     gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
 
                     new Chart(ctx, {
                         type: 'line',
                         data: {
-                            labels: station.predictions.map(p => p.t.split(' ')[1]), // Extract HH:MM
+                            labels: station.predictions.map(p => p.t),
                             datasets: [{
                                 data: station.predictions.map(p => p.v),
                                 borderColor: '#38bdf8',
                                 borderWidth: 3,
                                 fill: true,
                                 backgroundColor: gradient,
-                                tension: 0.4, // This creates the smooth "Ocean Wave" look
-                                pointRadius: 0, // Hides the dots
-                                pointHitRadius: 20
+                                tension: 0.4, // THE MAGIC: This creates the "Elegant Wave"
+                                pointRadius: 0,
+                                pointHitRadius: 50
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: {
+                            plugins: { 
                                 legend: { display: false },
                                 tooltip: {
+                                    mode: 'index',
+                                    intersect: false,
                                     backgroundColor: '#0f172a',
                                     titleColor: '#38bdf8',
-                                    callbacks: { label: (ctx) => `Depth: ${ctx.parsed.y} ft` }
+                                    bodyColor: '#f8fafc',
+                                    borderColor: 'rgba(255,255,255,0.1)',
+                                    borderWidth: 1,
+                                    displayColors: false,
+                                    callbacks: {
+                                        label: (context) => ` ${context.parsed.y.toFixed(2)} ft`
+                                    }
                                 }
                             },
                             scales: {
-                                x: {
-                                    grid: { display: false },
-                                    ticks: { color: '#64748b', maxTicksLimit: 6 }
+                                x: { 
+                                    display: false // We use our own custom labels at the bottom for elegance
                                 },
-                                y: {
-                                    grid: { color: 'rgba(255,255,255,0.05)' },
-                                    ticks: { color: '#64748b' }
+                                y: { 
+                                    beginAtZero: false,
+                                    suggestedMin: -1,
+                                    suggestedMax: 6,
+                                    grid: { color: 'rgba(255,255,255,0.05)', drawTicks: false },
+                                    ticks: { color: '#64748b', font: { size: 10 } }
                                 }
                             }
                         }
                     });
                 });
-            } catch (e) {
-                document.getElementById('dashboard-grid').innerHTML = '<p class="text-red-400 text-sm">Offline: Could not connect to TideStream API.</p>';
-            }
-        }
-
-        buildDashboard();
-    </script>
-</body>
-</html>
+            } catch (err) {
+                console.error("Dashboard failed:", err);
+                document.getElementById
