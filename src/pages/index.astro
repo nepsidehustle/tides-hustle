@@ -9,7 +9,7 @@ export const prerender = false;
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     
-    <title>TideTrack Pro v3.0</title>
+    <title>TideTrack Pro v3.1</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,18 +21,14 @@ export const prerender = false;
     <style>
         body { font-family: 'Outfit', sans-serif; }
         ::-webkit-scrollbar { width: 0px; background: transparent; }
-        
-        /* HARDCODED CENTERING UTILS */
-        .center-flex { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .center-text { text-align: center; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen p-4 md:p-8 flex justify-center items-center">
 
     <div class="w-full max-w-3xl bg-white min-h-[80vh] rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border-[6px] border-white overflow-hidden flex flex-col relative">
         
-        <header class="px-8 pt-12 pb-6 bg-white z-10 center-flex gap-3">
-            <h1 class="text-5xl font-black text-slate-900 tracking-tighter center-text">
+        <header class="px-8 pt-12 pb-6 bg-white z-10 flex flex-col items-center gap-3 text-center">
+            <h1 class="text-5xl font-black text-slate-900 tracking-tighter">
                 Tide<span class="text-blue-600">Track</span>
             </h1>
             
@@ -51,27 +47,27 @@ export const prerender = false;
 
         <main class="flex-1 bg-slate-50/50 p-6 md:p-10">
             <div id="grid" class="flex flex-col gap-10">
-                <div id="status" class="py-24 center-flex opacity-50">
+                <div id="status" class="py-24 flex flex-col items-center justify-center opacity-50">
                     <div class="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Scanning Satellites...</p>
                 </div>
             </div>
         </main>
 
-        <footer class="px-8 py-10 bg-white border-t border-slate-50 center-flex gap-6 z-10">
+        <footer class="px-8 py-10 bg-white border-t border-slate-50 flex flex-col items-center gap-6 z-10 text-center">
             <button onclick="window.location.href=window.location.href" class="group relative px-10 py-4 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
                 Force Update
             </button>
             
-            <div class="center-text max-w-xs mx-auto space-y-3">
+            <div class="max-w-xs mx-auto space-y-3">
                 <div class="flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-orange-500 shadow-sm"></span> Now</span>
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-900 shadow-sm"></span> Next Event</span>
                 </div>
                 <p class="text-[10px] leading-relaxed text-slate-300 font-medium pt-2 border-t border-slate-100">
-                    Build v3.0 • Educational Use Only.<br/>
+                    Build v3.1 • Educational Use Only.<br/>
                     <span class="text-rose-400 font-bold">NOT FOR NAVIGATION.</span>
-                    <br/><span id="debug-info" class="text-slate-200">Waiting for data...</span>
+                    <br/><span id="debug-info" class="text-slate-200">Waiting for diagnostics...</span>
                 </p>
             </div>
         </footer>
@@ -85,7 +81,7 @@ export const prerender = false;
 
         async function init() {
             try {
-                // 1. FETCH
+                // Fetch data (Cache buster to force fresh load from Cloudflare initially)
                 const apiUrl = '/api/tide-data?bust=' + Date.now();
                 const res = await fetch(apiUrl);
                 const container = document.getElementById('grid');
@@ -95,10 +91,12 @@ export const prerender = false;
                 
                 container.innerHTML = ''; 
 
-                // 2. CHECK DATA LENGTH (Debug)
-                if (fullData.length > 0 && fullData[0].predictions) {
-                    const count = fullData[0].predictions.length;
-                    document.getElementById('debug-info').innerText = 'Diagnostics: Loaded ' + count + ' hours of data.';
+                // --- DIAGNOSTICS CHECK ---
+                // We check the "server_version" we added to the API.
+                if (fullData.length > 0) {
+                    const sVer = fullData[0].server_version || "Old";
+                    const count = fullData[0].predictions ? fullData[0].predictions.length : 0;
+                    document.getElementById('debug-info').innerText = 'API v' + sVer + ' • Loaded ' + count + ' hours';
                 }
 
                 fullData.forEach((station, i) => {
@@ -107,7 +105,7 @@ export const prerender = false;
                         return;
                     }
 
-                    // 3. WINDOWING
+                    // 1. WINDOWING
                     const now = new Date();
                     let rawNowIndex = 0;
                     let minDiff = Infinity;
@@ -125,7 +123,7 @@ export const prerender = false;
                     const subset = station.predictions.slice(startIdx, endIdx);
                     const displayNowIndex = rawNowIndex - startIdx;
 
-                    // 4. FIND BLACK DOT
+                    // 2. FIND BLACK DOT (Event)
                     let nextEventIndex = -1;
                     for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
                         const prev = subset[j-1].v;
@@ -137,7 +135,7 @@ export const prerender = false;
                         }
                     }
 
-                    // 5. CHART DATA
+                    // 3. DATA PREP
                     const labels = subset.map(p => p.t);
                     const values = subset.map(p => p.v);
                     const high = Math.max(...values);
@@ -160,12 +158,12 @@ export const prerender = false;
                         badgeText = nextV > currentV ? "Rising" : "Falling";
                     }
 
-                    // 6. RENDER CARD
+                    // 4. RENDER
                     const card = document.createElement('div');
                     card.className = 'bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.06)] border border-slate-100 relative';
                     
                     card.innerHTML = `
-                        <div class="center-flex mb-6 text-center">
+                        <div class="flex flex-col items-center mb-6 text-center">
                             <h2 class="text-3xl font-bold text-slate-800 tracking-tight mb-2">${station.name}</h2>
                             <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
                                 ${badgeText}
