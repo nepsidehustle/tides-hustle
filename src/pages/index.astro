@@ -5,7 +5,11 @@ export const prerender = false;
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TideTrack Pro</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
+    <title>TideTrack Pro v2.5</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -51,8 +55,8 @@ export const prerender = false;
         </main>
 
         <footer class="px-8 py-10 bg-white border-t border-slate-50 flex flex-col items-center gap-6 z-10">
-            <button onclick="window.location.reload()" class="group relative px-10 py-4 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
-                Update Data
+            <button onclick="window.location.href=window.location.href" class="group relative px-10 py-4 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
+                Force Update
             </button>
             
             <div class="text-center max-w-xs mx-auto space-y-3">
@@ -61,8 +65,8 @@ export const prerender = false;
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-900 shadow-sm"></span> Next Event</span>
                 </div>
                 <p class="text-[10px] leading-relaxed text-slate-300 font-medium pt-2 border-t border-slate-100">
-                    Data provided for educational purposes only. 
-                    <br/><span class="text-rose-400 font-bold">NOT FOR MARITIME NAVIGATION.</span>
+                    Build v2.5 • Educational Use Only.<br/>
+                    <span class="text-rose-400 font-bold">NOT FOR NAVIGATION.</span>
                 </p>
             </div>
         </footer>
@@ -76,8 +80,8 @@ export const prerender = false;
 
         async function init() {
             try {
-                // FIX 1: Use simple string concatenation for the URL to avoid backtick errors
-                const apiUrl = '/api/tide-data?v=' + Date.now();
+                // FORCE FRESH DATA
+                const apiUrl = '/api/tide-data?cache_bust=' + Math.random();
                 const res = await fetch(apiUrl);
                 
                 const container = document.getElementById('grid');
@@ -87,12 +91,11 @@ export const prerender = false;
 
                 fullData.forEach((station, i) => {
                     if (station.error || !station.predictions || station.predictions.length === 0) {
-                        // FIX 2: Safe string for error message
                         container.innerHTML += '<div class="p-6 bg-rose-50 text-rose-500 rounded-3xl text-center font-bold border border-rose-100">Station Offline</div>';
                         return;
                     }
 
-                    // --- 1. WINDOWING LOGIC ---
+                    // 1. WINDOWING
                     const now = new Date();
                     let rawNowIndex = 0;
                     let minDiff = Infinity;
@@ -110,37 +113,35 @@ export const prerender = false;
                     const subset = station.predictions.slice(startIdx, endIdx);
                     const displayNowIndex = rawNowIndex - startIdx;
 
-                    // --- 2. FIND NEXT EVENT ---
+                    // 2. FIND NEXT EVENT (Black Dot)
                     let nextEventIndex = -1;
                     for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
                         const prev = subset[j-1].v;
                         const curr = subset[j].v;
                         const next = subset[j+1].v;
+                        // Peak or Valley
                         if ((curr > prev && curr > next) || (curr < prev && curr < next)) {
                             nextEventIndex = j;
                             break; 
                         }
                     }
 
-                    // --- 3. DATA PREP ---
+                    // 3. DATA PREP
                     const labels = subset.map(p => p.t);
                     const values = subset.map(p => p.v);
                     const high = Math.max(...values);
                     const low = Math.min(...values);
 
-                    // FIX 3: Simplified Badge Text Logic (No complex nesting)
+                    // Badge Text Logic
                     let badgeText = "Trend Only";
                     if (nextEventIndex !== -1) {
                          const eVal = values[nextEventIndex];
                          const eType = eVal > values[nextEventIndex-1] ? "High" : "Low";
-                         
-                         // Safe Time Parsing
-                         const tStr = labels[nextEventIndex].split(' ')[1]; // "14:00"
+                         const tStr = labels[nextEventIndex].split(' ')[1];
                          const [hStr, mStr] = tStr.split(':');
                          let hour = parseInt(hStr);
                          const ampm = hour >= 12 ? 'PM' : 'AM';
                          hour = hour % 12 || 12;
-                         
                          badgeText = "Next " + eType + " " + hour + ":" + mStr + " " + ampm;
                     } else {
                         const currentV = values[displayNowIndex];
@@ -148,11 +149,10 @@ export const prerender = false;
                         badgeText = nextV > currentV ? "Rising" : "Falling";
                     }
 
-                    // --- 4. RENDER CARD ---
+                    // 4. RENDER
                     const card = document.createElement('div');
                     card.className = 'bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.06)] border border-slate-100 relative';
                     
-                    // FIX 4: Use clean backticks for HTML block
                     card.innerHTML = `
                         <div class="flex flex-col items-center mb-6 text-center">
                             <h2 class="text-3xl font-bold text-slate-800 tracking-tight mb-2">${station.name}</h2>
@@ -183,8 +183,10 @@ export const prerender = false;
                                 },
                                 pointRadius: (c) => {
                                     const idx = c.dataIndex;
-                                    if (idx === displayNowIndex) return 9; 
-                                    if (idx === nextEventIndex) return 9; 
+                                    if (idx === displayNowIndex) return 9; // Orange (Now)
+                                    if (idx === nextEventIndex) return 9;  // Black (Event)
+                                    
+                                    // Optional: Blue dots for other peaks
                                     const v = c.dataset.data[idx];
                                     if ((v === high || v === low) && idx !== nextEventIndex) return 4; 
                                     return 0;
@@ -208,29 +210,4 @@ export const prerender = false;
                             scales: {
                                 x: {
                                     type: 'category',
-                                    grid: { display: false },
-                                    ticks: {
-                                        maxTicksLimit: 6,
-                                        color: (c) => c.index === displayNowIndex ? '#f97316' : '#cbd5e1',
-                                        font: (c) => c.index === displayNowIndex ? {weight:'800', size:12} : {weight:'600', size:11},
-                                        callback: function(val, index) {
-                                            if (index === displayNowIndex) return "NOW";
-                                            if (index === nextEventIndex) return ""; 
-                                            const label = this.getLabelForValue(val);
-                                            const time = label.split(' ')[1];
-                                            const h = parseInt(time.split(':')[0]);
-                                            return `${h % 12 || 12}${h >= 12 ? 'pm' : 'am'}`;
-                                        }
-                                    }
-                                },
-                                y: { display: false, suggestedMin: low - 1.5, suggestedMax: high + 1.5 }
-                            }
-                        }
-                    });
-                });
-            } catch (err) { console.error(err); }
-        }
-        init();
-    </script>
-</body>
-</html>
+                                    grid: { display
