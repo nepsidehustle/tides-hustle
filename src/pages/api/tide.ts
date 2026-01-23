@@ -1,47 +1,35 @@
 export const prerender = false;
 
-export async function GET() {
-  const stations = [
-    { id: "8661070", name: "Myrtle Beach" },
-    { id: "8517201", name: "Jamaica Bay" }
-  ];
+const stations = [
+  { id: "8661070", name: "Myrtle Beach" },
+  { id: "8517201", name: "Jamaica Bay" }
+];
 
+export async function GET() {
   try {
-    const results = await Promise.all(
+    const allData = await Promise.all(
       stations.map(async (site) => {
-        // Asking for 'today' is much more stable than 'latest'
-        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json`;
+        // Requesting 72 hours (3 days) of data
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
         
         const res = await fetch(api);
-        const data = await res.json();
-        const predictions = data.predictions;
-
-        if (!predictions || predictions.length === 0) {
-          return `${site.name} data is currently unavailable.`;
-        }
-
-        // Get the current time in NOAA's format (YYYY-MM-DD HH:MM)
-        const now = new Date();
-        const nowStr = now.getFullYear() + "-" + 
-                      String(now.getMonth() + 1).padStart(2, '0') + "-" + 
-                      String(now.getDate()).padStart(2, '0') + " " + 
-                      String(now.getHours()).padStart(2, '0');
-
-        // Find the next tide event in the list
-        const nextTide = predictions.find(p => p.t > nowStr) || predictions[0];
-        const type = nextTide.type === "H" ? "High Tide" : "Low Tide";
-        const trend = nextTide.type === "H" ? "rising" : "falling";
-        const time = nextTide.t.split(" ")[1]; // Just the HH:MM
-
-        return `${site.name} is ${nextTide.v} feet and ${trend}. Next ${type} is at ${time}.`;
+        const json = await res.json();
+        
+        return {
+          name: site.name,
+          predictions: json.predictions.map((p: any) => ({
+            time: p.t,
+            level: parseFloat(p.v)
+          }))
+        };
       })
     );
 
-    return new Response(results.join(" "), {
+    return new Response(JSON.stringify(allData), {
       status: 200,
-      headers: { "Content-Type": "text/plain" }
+      headers: { "Content-Type": "application/json" }
     });
-  } catch (error) {
-    return new Response("I'm having trouble connecting to NOAA.", { status: 500 });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "Fail" }), { status: 500 });
   }
 }
