@@ -8,60 +8,56 @@ export async function GET() {
 
   try {
     const results = await Promise.all(stations.map(async (site) => {
-      // FIX: Changed to 'date=today' so NOAA accepts the request
-      const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
+      // Request 1: Get the exact High/Low times (Marine Precision)
+      // interval=hilo tells NOAA: "Just give me the peaks and valleys times"
+      const hiloApi = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&cb=${Date.now()}`;
       
-      const res = await fetch(api);
-      const data = await res.json();
+      // Request 2: Get the CURRENT level (Hourly data for right now)
+      const currentApi = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=latest&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&cb=${Date.now()}`;
 
-      if (!data.predictions) return `${site.name} data is currently unavailable.`;
+      const [hiloRes, curRes] = await Promise.all([fetch(hiloApi), fetch(currentApi)]);
+      const hiloData = await hiloRes.json();
+      const curData = await curRes.json();
 
-      const preds = data.predictions;
-      
-      // Since 'date=today' starts at midnight, we need to find "NOW" in the list
+      // Safety checks
+      if (!hiloData.predictions || !curData.predictions) return `${site.name} is offline.`;
+
+      // 1. Get Current Status
+      const current = curData.predictions[0]; // The single point for "Now"
+      const curVal = parseFloat(current.v);
+
+      // 2. Find the NEXT High or Low in the list
       const now = new Date();
-      // Find the point in the array closest to the current time
-      const currentIndex = preds.findIndex((p: any) => {
-          const pTime = new Date(p.t.replace(/-/g, "/"));
-          return pTime > now;
-      }) || 0;
+      // Filter for events that are in the future
+      const nextEventObj = hiloData.predictions.find((p: any) => {
+          const t = new Date(p.t.replace(/-/g, "/"));
+          return t > now;
+      });
 
-      // Use the closest point as "Current"
-      const currentPoint = preds[currentIndex] || preds[0];
-      const nextPoint = preds[currentIndex + 1] || preds[1];
-      
-      const nowVal = parseFloat(currentPoint.v);
-      const nextVal = parseFloat(nextPoint.v);
-      const isRising = nextVal > nowVal;
-
-      // Find the next Peak/Valley starting from right now
-      let targetPoint = currentPoint;
-      let limit = Math.min(preds.length, currentIndex + 12); 
-
-      if (isRising) {
-        for(let i=currentIndex; i<limit; i++) {
-            if (parseFloat(preds[i].v) > parseFloat(targetPoint.v)) targetPoint = preds[i];
-        }
-      } else {
-        for(let i=currentIndex; i<limit; i++) {
-             if (parseFloat(preds[i].v) < parseFloat(targetPoint.v)) targetPoint = preds[i];
-        }
+      // If we found a future event, format it
+      let eventText = "unknown";
+      if (nextEventObj) {
+          const type = nextEventObj.type === "H" ? "High Tide" : "Low Tide";
+          const height = parseFloat(nextEventObj.v).toFixed(1);
+          
+          // Format time: 17:23 -> 5:23 PM
+          const [d, t] = nextEventObj.t.split(" ");
+          let [h, m] = t.split(":");
+          let hour = parseInt(h);
+          const ampm = hour >= 12 ? "PM" : "AM";
+          hour = hour % 12 || 12;
+          
+          eventText = `${type} is ${height}ft at ${hour}:${m} ${ampm}`;
       }
 
-      const eventType = isRising ? "High Tide" : "Low Tide";
-      const eventHeight = parseFloat(targetPoint.v).toFixed(1);
-      
-      let timeStr = targetPoint.t.split(" ")[1];
-      let [h, m] = timeStr.split(":");
-      let hours = parseInt(h);
-      let ampm = hours >= 12 ? "PM" : "AM";
-      hours = hours % 12 || 12;
+      // Determine rising/falling based on whether the next event is High (must be rising) or Low (must be falling)
+      const status = nextEventObj && nextEventObj.type === "H" ? "rising" : "falling";
 
-      return `${site.name} is ${nowVal.toFixed(1)}ft and ${isRising ? "rising" : "falling"}. Next ${eventType} is ${eventHeight}ft at ${hours}:${m} ${ampm}.`;
+      return `${site.name} is ${curVal.toFixed(1)}ft and ${status}. Next ${eventText}.`;
     }));
 
     return new Response(results.join(" "), { status: 200 });
   } catch (e) {
-    return new Response("Siri cannot connect to NOAA right now.", { status: 200 });
+    return new Response("Siri is syncing with NOAA...", { status: 200 });
   }
 }
