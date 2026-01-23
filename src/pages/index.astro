@@ -76,8 +76,10 @@ export const prerender = false;
 
         async function init() {
             try {
-                // FIXED: Added timestamp to force fresh data load
-                const res = await fetch(`/api/tide-data?v=${Date.now()}`);
+                // FIX 1: Use simple string concatenation for the URL to avoid backtick errors
+                const apiUrl = '/api/tide-data?v=' + Date.now();
+                const res = await fetch(apiUrl);
+                
                 const container = document.getElementById('grid');
                 if (!res.ok) throw new Error("Server Unavailable");
                 const fullData = await res.json();
@@ -85,7 +87,8 @@ export const prerender = false;
 
                 fullData.forEach((station, i) => {
                     if (station.error || !station.predictions || station.predictions.length === 0) {
-                        container.innerHTML += `<div class="p-6 bg-rose-50 text-rose-500 rounded-3xl text-center font-bold border border-rose-100">Station Offline</div>`;
+                        // FIX 2: Safe string for error message
+                        container.innerHTML += '<div class="p-6 bg-rose-50 text-rose-500 rounded-3xl text-center font-bold border border-rose-100">Station Offline</div>';
                         return;
                     }
 
@@ -100,14 +103,14 @@ export const prerender = false;
                         if (diff < minDiff) { minDiff = diff; rawNowIndex = idx; }
                     });
 
-                    // INCREASED WINDOW: 4 hours back -> 48 hours forward
+                    // 4 hours back -> 48 hours forward
                     const startIdx = Math.max(0, rawNowIndex - 4);
                     const endIdx = Math.min(station.predictions.length, rawNowIndex + 48);
                     
                     const subset = station.predictions.slice(startIdx, endIdx);
                     const displayNowIndex = rawNowIndex - startIdx;
 
-                    // --- 2. FIND NEXT EVENT (BLACK DOT) ---
+                    // --- 2. FIND NEXT EVENT ---
                     let nextEventIndex = -1;
                     for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
                         const prev = subset[j-1].v;
@@ -125,15 +128,20 @@ export const prerender = false;
                     const high = Math.max(...values);
                     const low = Math.min(...values);
 
-                    // Badge Text Logic
+                    // FIX 3: Simplified Badge Text Logic (No complex nesting)
                     let badgeText = "Trend Only";
                     if (nextEventIndex !== -1) {
                          const eVal = values[nextEventIndex];
                          const eType = eVal > values[nextEventIndex-1] ? "High" : "Low";
-                         const tStr = labels[nextEventIndex].split(' ')[1];
-                         const [h, m] = tStr.split(':');
-                         const hour = parseInt(h);
-                         badgeText = `Next ${eType} ${hour % 12 || 12}:${m} ${hour>=12?'PM':'AM'}`;
+                         
+                         // Safe Time Parsing
+                         const tStr = labels[nextEventIndex].split(' ')[1]; // "14:00"
+                         const [hStr, mStr] = tStr.split(':');
+                         let hour = parseInt(hStr);
+                         const ampm = hour >= 12 ? 'PM' : 'AM';
+                         hour = hour % 12 || 12;
+                         
+                         badgeText = "Next " + eType + " " + hour + ":" + mStr + " " + ampm;
                     } else {
                         const currentV = values[displayNowIndex];
                         const nextV = values[displayNowIndex + 1] || currentV;
@@ -142,4 +150,87 @@ export const prerender = false;
 
                     // --- 4. RENDER CARD ---
                     const card = document.createElement('div');
-                    card.className = 'bg-white rounded-[2.5rem] p-6 md
+                    card.className = 'bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.06)] border border-slate-100 relative';
+                    
+                    // FIX 4: Use clean backticks for HTML block
+                    card.innerHTML = `
+                        <div class="flex flex-col items-center mb-6 text-center">
+                            <h2 class="text-3xl font-bold text-slate-800 tracking-tight mb-2">${station.name}</h2>
+                            <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
+                                ${badgeText}
+                            </span>
+                        </div>
+                        <div class="relative h-64 w-full">
+                            <canvas id="c-${i}"></canvas>
+                        </div>
+                    `;
+                    container.appendChild(card);
+
+                    const ctx = document.getElementById(`c-${i}`);
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: values,
+                                borderWidth: 4,
+                                tension: 0.45,
+                                fill: true,
+                                backgroundColor: 'rgba(37, 99, 235, 0.03)',
+                                segment: {
+                                    borderColor: ctx => ctx.p0DataIndex < displayNowIndex ? 'rgba(203, 213, 225, 0.5)' : '#2563eb',
+                                    borderDash: ctx => ctx.p0DataIndex < displayNowIndex ? [6, 6] : undefined,
+                                },
+                                pointRadius: (c) => {
+                                    const idx = c.dataIndex;
+                                    if (idx === displayNowIndex) return 9; 
+                                    if (idx === nextEventIndex) return 9; 
+                                    const v = c.dataset.data[idx];
+                                    if ((v === high || v === low) && idx !== nextEventIndex) return 4; 
+                                    return 0;
+                                },
+                                pointBackgroundColor: (c) => {
+                                    const idx = c.dataIndex;
+                                    if (idx === displayNowIndex) return '#f97316';
+                                    if (idx === nextEventIndex) return '#1e293b';
+                                    return '#3b82f6';
+                                },
+                                pointBorderColor: '#fff',
+                                pointBorderWidth: 3,
+                                pointHoverRadius: 10,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: {
+                                    type: 'category',
+                                    grid: { display: false },
+                                    ticks: {
+                                        maxTicksLimit: 6,
+                                        color: (c) => c.index === displayNowIndex ? '#f97316' : '#cbd5e1',
+                                        font: (c) => c.index === displayNowIndex ? {weight:'800', size:12} : {weight:'600', size:11},
+                                        callback: function(val, index) {
+                                            if (index === displayNowIndex) return "NOW";
+                                            if (index === nextEventIndex) return ""; 
+                                            const label = this.getLabelForValue(val);
+                                            const time = label.split(' ')[1];
+                                            const h = parseInt(time.split(':')[0]);
+                                            return `${h % 12 || 12}${h >= 12 ? 'pm' : 'am'}`;
+                                        }
+                                    }
+                                },
+                                y: { display: false, suggestedMin: low - 1.5, suggestedMax: high + 1.5 }
+                            }
+                        }
+                    });
+                });
+            } catch (err) { console.error(err); }
+        }
+        init();
+    </script>
+</body>
+</html>
