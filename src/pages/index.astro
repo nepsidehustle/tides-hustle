@@ -15,39 +15,34 @@ export const prerender = false;
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        /* Force the pretty font everywhere */
         body { font-family: 'Outfit', sans-serif; }
         ::-webkit-scrollbar { width: 0px; background: transparent; }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 min-h-screen p-4 md:p-8 flex justify-center items-start">
+<body class="bg-slate-100 text-slate-800 min-h-screen p-4 md:p-8 flex justify-center items-center">
 
-    <div class="w-full max-w-4xl bg-white min-h-[85vh] rounded-[3rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border-4 border-white overflow-hidden flex flex-col relative">
+    <div class="w-full max-w-3xl bg-white min-h-[80vh] rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border-[6px] border-white overflow-hidden flex flex-col relative">
         
-        <header class="px-8 pt-10 pb-6 bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-50">
-            <div class="flex justify-between items-center">
-                <div>
-                    <h1 class="text-4xl font-black text-slate-900 tracking-tighter">
-                        Tide<span class="text-blue-600">Track</span>
-                    </h1>
-                    <div class="flex items-center gap-2 mt-2">
-                        <span class="relative flex h-2 w-2">
-                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Live Feed
-                        </p>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <div id="clock" class="text-2xl font-bold text-slate-300 tracking-tight">--:--</div>
-                </div>
+        <header class="px-8 pt-12 pb-6 bg-white z-10 flex flex-col items-center gap-3">
+            <h1 class="text-5xl font-black text-slate-900 tracking-tighter">
+                Tide<span class="text-blue-600">Track</span>
+            </h1>
+            
+            <div class="flex items-center gap-3 bg-slate-50 px-5 py-2 rounded-full border border-slate-100">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    Live Feed
+                </span>
+                <span class="w-px h-3 bg-slate-300"></span>
+                <div id="clock" class="text-sm font-bold text-slate-600 font-mono tracking-tight">--:--</div>
             </div>
         </header>
 
         <main class="flex-1 bg-slate-50/50 p-6 md:p-10">
-            <div id="grid" class="grid grid-cols-1 gap-8">
+            <div id="grid" class="flex flex-col gap-10">
                 <div id="status" class="py-24 text-center flex flex-col items-center justify-center opacity-50">
                     <div class="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Scanning Satellites...</p>
@@ -55,18 +50,17 @@ export const prerender = false;
             </div>
         </main>
 
-        <footer class="px-8 py-8 bg-white border-t border-slate-50 flex flex-col items-center gap-6 z-10">
-            <button onclick="window.location.reload()" class="group relative px-8 py-3 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
+        <footer class="px-8 py-10 bg-white border-t border-slate-50 flex flex-col items-center gap-6 z-10">
+            <button onclick="window.location.reload()" class="group relative px-10 py-4 font-bold text-white transition-all duration-300 bg-slate-900 rounded-2xl hover:bg-blue-600 shadow-xl hover:shadow-blue-500/20 active:scale-95 text-sm tracking-wide">
                 Update Data
             </button>
             
-            <div class="text-center max-w-md mx-auto space-y-2">
-                <div class="flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-500"></span> Now</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-900"></span> Event</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Future</span>
+            <div class="text-center max-w-xs mx-auto space-y-3">
+                <div class="flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-orange-500 shadow-sm"></span> Now</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-900 shadow-sm"></span> Next Event</span>
                 </div>
-                <p class="text-[10px] leading-relaxed text-slate-300 font-medium">
+                <p class="text-[10px] leading-relaxed text-slate-300 font-medium pt-2 border-t border-slate-100">
                     Data provided for educational purposes only. 
                     <br/><span class="text-rose-400 font-bold">NOT FOR MARITIME NAVIGATION.</span>
                 </p>
@@ -82,7 +76,8 @@ export const prerender = false;
 
         async function init() {
             try {
-                const res = await fetch('/api/tide-data');
+                // FIXED: Added timestamp to force fresh data load
+                const res = await fetch(`/api/tide-data?v=${Date.now()}`);
                 const container = document.getElementById('grid');
                 if (!res.ok) throw new Error("Server Unavailable");
                 const fullData = await res.json();
@@ -99,28 +94,25 @@ export const prerender = false;
                     let rawNowIndex = 0;
                     let minDiff = Infinity;
                     
-                    // Find "Now"
                     station.predictions.forEach((p, idx) => {
                         const pDate = new Date(p.t.replace(/-/g, '/')); 
                         const diff = Math.abs(now - pDate);
                         if (diff < minDiff) { minDiff = diff; rawNowIndex = idx; }
                     });
 
-                    // Create Window: 4 hours back -> 36 hours forward
-                    // We reduced forward slightly to make the curve look more detailed
+                    // INCREASED WINDOW: 4 hours back -> 48 hours forward
                     const startIdx = Math.max(0, rawNowIndex - 4);
-                    const endIdx = Math.min(station.predictions.length, rawNowIndex + 36);
+                    const endIdx = Math.min(station.predictions.length, rawNowIndex + 48);
+                    
                     const subset = station.predictions.slice(startIdx, endIdx);
                     const displayNowIndex = rawNowIndex - startIdx;
 
                     // --- 2. FIND NEXT EVENT (BLACK DOT) ---
                     let nextEventIndex = -1;
-                    // Start looking strictly AFTER "Now"
                     for (let j = displayNowIndex + 1; j < subset.length - 1; j++) {
                         const prev = subset[j-1].v;
                         const curr = subset[j].v;
                         const next = subset[j+1].v;
-                        // Peak Detection
                         if ((curr > prev && curr > next) || (curr < prev && curr < next)) {
                             nextEventIndex = j;
                             break; 
@@ -133,7 +125,7 @@ export const prerender = false;
                     const high = Math.max(...values);
                     const low = Math.min(...values);
 
-                    // Badge Text
+                    // Badge Text Logic
                     let badgeText = "Trend Only";
                     if (nextEventIndex !== -1) {
                          const eVal = values[nextEventIndex];
@@ -143,100 +135,11 @@ export const prerender = false;
                          const hour = parseInt(h);
                          badgeText = `Next ${eType} ${hour % 12 || 12}:${m} ${hour>=12?'PM':'AM'}`;
                     } else {
-                        // Fallback if no peak found in window
                         const currentV = values[displayNowIndex];
                         const nextV = values[displayNowIndex + 1] || currentV;
-                        badgeText = nextV > currentV ? "Tide Rising" : "Tide Falling";
+                        badgeText = nextV > currentV ? "Rising" : "Falling";
                     }
 
                     // --- 4. RENDER CARD ---
                     const card = document.createElement('div');
-                    card.className = 'bg-white rounded-[2rem] p-6 md:p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] border border-slate-100/50 transition-transform hover:scale-[1.01] duration-300';
-                    
-                    card.innerHTML = `
-                        <div class="flex justify-between items-center mb-8">
-                            <h2 class="text-2xl font-bold text-slate-800 tracking-tight">${station.name}</h2>
-                            <span class="text-xs font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-full uppercase tracking-wider shadow-sm">
-                                ${badgeText}
-                            </span>
-                        </div>
-                        <div class="relative h-64 w-full">
-                            <canvas id="c-${i}"></canvas>
-                        </div>
-                    `;
-                    container.appendChild(card);
-
-                    const ctx = document.getElementById(`c-${i}`);
-                    new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                data: values,
-                                borderWidth: 4,
-                                tension: 0.45, // Slightly curvier
-                                fill: true,
-                                backgroundColor: 'rgba(37, 99, 235, 0.03)',
-                                
-                                // GRAY PAST / BLUE FUTURE
-                                segment: {
-                                    borderColor: ctx => ctx.p0DataIndex < displayNowIndex ? 'rgba(203, 213, 225, 0.5)' : '#2563eb',
-                                    borderDash: ctx => ctx.p0DataIndex < displayNowIndex ? [6, 6] : undefined,
-                                },
-
-                                // DOT SIZES
-                                pointRadius: (c) => {
-                                    const idx = c.dataIndex;
-                                    if (idx === displayNowIndex) return 9; // ORANGE (Now)
-                                    if (idx === nextEventIndex) return 9;  // BLACK (Next Event)
-                                    // Only show Blue dots if they are NOT the black dot
-                                    const v = c.dataset.data[idx];
-                                    if ((v === high || v === low) && idx !== nextEventIndex) return 5; 
-                                    return 0;
-                                },
-                                pointBackgroundColor: (c) => {
-                                    const idx = c.dataIndex;
-                                    if (idx === displayNowIndex) return '#f97316'; // Orange
-                                    if (idx === nextEventIndex) return '#1e293b'; // Slate-800
-                                    return '#3b82f6'; // Blue-500
-                                },
-                                pointBorderColor: '#fff',
-                                pointBorderWidth: 3,
-                                pointHoverRadius: 10,
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: { mode: 'index', intersect: false },
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: {
-                                    type: 'category',
-                                    grid: { display: false },
-                                    ticks: {
-                                        maxTicksLimit: 6,
-                                        color: (c) => c.index === displayNowIndex ? '#f97316' : '#cbd5e1',
-                                        font: (c) => c.index === displayNowIndex ? {weight:'800', size:12} : {weight:'600', size:11},
-                                        callback: function(val, index) {
-                                            if (index === displayNowIndex) return "NOW";
-                                            if (index === nextEventIndex) return ""; // Hide label under Black Dot
-                                            
-                                            const label = this.getLabelForValue(val);
-                                            const time = label.split(' ')[1];
-                                            const h = parseInt(time.split(':')[0]);
-                                            return `${h % 12 || 12}${h >= 12 ? 'pm' : 'am'}`;
-                                        }
-                                    }
-                                },
-                                y: { display: false, suggestedMin: low - 1.5, suggestedMax: high + 1.5 }
-                            }
-                        }
-                    });
-                });
-            } catch (err) { console.error(err); }
-        }
-        init();
-    </script>
-</body>
-</html>
+                    card.className = 'bg-white rounded-[2.5rem] p-6 md
