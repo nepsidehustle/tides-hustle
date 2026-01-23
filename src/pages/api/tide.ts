@@ -10,8 +10,7 @@ export async function GET() {
     const results = await Promise.all(
       stations.map(async (site) => {
         // The cb=${Date.now()} ensures the data is fresh every time
-        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&cb=${Date.now()}`;
-        
+        const api = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&date=today&format=json&nocache=${Date.now()}`;
         const res = await fetch(api);
         const data = await res.json();
         const predictions = data.predictions;
