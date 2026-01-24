@@ -1,28 +1,43 @@
-# TideTrack v13
+# TideTrack
 
-A lightweight, dual-engine tide monitoring application for Myrtle Beach and Jamaica Bay. 
+A dual-engine tide monitoring application for Myrtle Beach and Jamaica Bay. 
 
-## Features
+## 🚀 Live Demo
+- **Dashboard:** `https://[your-site].pages.dev`
+- **Siri Feed:** `https://[your-site].pages.dev/api/tide-data`
 
-- **Visual Dashboard:** Clean, iOS-style card layout showing real-time water levels and upcoming high/low tides.
-- **Siri Integration:** Dedicated API endpoint (`/api/tide-data`) that returns natural language summaries for iOS Shortcuts.
-- **Resilient Architecture:** - **Frontend:** Fetches directly from NOAA servers (Client-side) to ensure data freshness and layout stability.
-  - **Backend:** Intelligent trend calculation that ignores server timezones to provide accurate "Rising/Falling" logic.
+## ✨ Features
 
-## Technology
+### 1. Visual Dashboard (Frontend)
+- **Zero-Crash Architecture:** Fetches data directly from NOAA in the browser (Client-side).
+- **Jamless Layout:** Uses HTML Tables and Inline CSS to prevent layout shifts.
+- **Auto-Timezone:** Clock detects browser location (EST/EDT/PST).
+
+### 2. Siri Intelligence (Backend API)
+- **Natural Language:** Returns a simple paragraph of text Siri can read directly.
+- **Timezone Proof:** Uses "Integer Math" (e.g., `20260123`) to sync NOAA data with Wall Clock time, ignoring Server UTC offsets.
+- **Smart Trends:** Calculates "Rising/Falling" logic by looking backward if at the end of a dataset.
+
+## 📱 How to Set Up Siri
+
+1. Open **Shortcuts** on iPhone.
+2. Create a new Shortcut named **"Check Tides"**.
+3. Add Action: **"Get Contents of URL"** -> Paste your `/api/tide-data` link.
+4. Add Action: **"Speak Text"** -> Select `Contents of URL`.
+5. Done.
+
+## 🛠️ Tech Stack
 
 - **Framework:** Astro (Serverless)
-- **Styling:** Inline CSS (No dependencies, zero-jam layout)
-- **Data Source:** NOAA Tides & Currents API
+- **Deployment:** Cloudflare Pages
+- **Data:** NOAA Tides & Currents API
 
-## Disclaimer
+## ⚠️ Disclaimer
 
 **EDUCATIONAL USE ONLY.**
-
-This software is for educational and hobbyist purposes only. The tide data presented is based on predictions and unverified real-time sensor readings. It may be inaccurate due to weather conditions, sensor malfunctions, or API errors.
-
-**DO NOT USE FOR NAVIGATION.** Do not rely on this application for boating, shipping, or any safety-critical decision-making. Always consult official NOAA charts and verified navigation tools.
+This data is estimated and may be inaccurate. 
+**DO NOT USE FOR NAVIGATION.** Not affiliated with NOAA.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License. Copyright (c) 2026 TideTrack.
