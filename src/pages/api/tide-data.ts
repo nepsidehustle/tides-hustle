@@ -7,13 +7,11 @@ export async function GET() {
   ];
 
   try {
-    const allData = await Promise.all(
+    // 1. Gather all reports in parallel
+    const reports = await Promise.all(
       stations.map(async (site) => {
         const cb = Date.now();
-        // 1. Get Schedule (High/Low times)
         const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-        
-        // 2. Get Current Level (Hourly)
         const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
 
         const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
@@ -21,14 +19,13 @@ export async function GET() {
         const curJson = await curRes.json();
 
         // Defaults
-        let currentLevel = "---";
-        let trend = "Stable";
-        let futureEvents = [];
+        let currentLevel = "unknown";
+        let trend = "stable";
+        let nextEventText = "No upcoming tides";
 
-        // Process Current Data
+        // Calculate Current Level
         if (curJson.predictions && curJson.predictions.length > 0) {
             const now = new Date();
-            // Find closest hourly reading to "now"
             const closest = curJson.predictions.reduce((prev: any, curr: any) => {
                 const pTime = new Date(prev.t.replace(/-/g, '/'));
                 const cTime = new Date(curr.t.replace(/-/g, '/'));
@@ -36,42 +33,40 @@ export async function GET() {
             });
             currentLevel = parseFloat(closest.v).toFixed(1);
             
-            // Calculate Trend
             const idx = curJson.predictions.indexOf(closest);
             if (idx < curJson.predictions.length - 1) {
                 const nextVal = parseFloat(curJson.predictions[idx+1].v);
-                trend = nextVal > parseFloat(currentLevel) ? "Rising" : "Falling";
+                trend = nextVal > parseFloat(currentLevel) ? "rising" : "falling";
             }
         }
 
-        // Process Timeline (Future Only)
+        // Calculate Next Event
         if (schedJson.predictions) {
             const now = new Date();
-            futureEvents = schedJson.predictions.filter((p: any) => {
-                const t = new Date(p.t.replace(/-/g, '/'));
-                return t > now;
-            }).slice(0, 4).map((p: any) => ({
-                time: p.t,
-                type: p.type === 'H' ? 'High Tide' : 'Low Tide',
-                value: parseFloat(p.v).toFixed(1)
-            }));
+            const nextEvent = schedJson.predictions.find((p: any) => new Date(p.t.replace(/-/g, '/')) > now);
+            if (nextEvent) {
+                const d = new Date(nextEvent.t.replace(/-/g, '/'));
+                const timeStr = d.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+                const typeStr = nextEvent.type === 'H' ? "High Tide" : "Low Tide";
+                nextEventText = `Next is ${typeStr} at ${timeStr}`;
+            }
         }
 
-        // Return Clean JSON for Siri
-        return {
-          name: site.name,
-          current: { value: currentLevel, trend: trend },
-          timeline: futureEvents
-        };
+        // BUILD THE SENTENCE
+        return `${site.name} is at ${currentLevel} feet and ${trend}. ${nextEventText}.`;
       })
     );
 
-    return new Response(JSON.stringify(allData), { 
+    // 2. Join sentences with a pause (newline)
+    const finalSpeech = reports.join("\n\n");
+
+    // 3. Return as PLAIN TEXT
+    return new Response(finalSpeech, { 
       status: 200,
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "text/plain" } 
     });
 
   } catch (e) {
-    return new Response(JSON.stringify({ error: "System Error" }), { status: 500 });
+    return new Response("I'm sorry, I couldn't reach the tide satellites right now.", { status: 500 });
   }
 }
