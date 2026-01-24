@@ -10,7 +10,7 @@ export async function GET() {
     const reports = await Promise.all(
       stations.map(async (site) => {
         const cb = Date.now();
-        // Request 48 hours of data to ensure we cross midnight boundaries safely
+        // Request 48h schedule, 24h hourly
         const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
         const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
 
@@ -22,54 +22,49 @@ export async function GET() {
         let trend = "steady";
         let nextEventText = "No upcoming tides found";
         
-        // 1. FIND "NOW" (Based on Data, not Server Clock)
-        let anchorTimeStr = ""; // Will hold "2023-01-23 20:00"
+        // 1. DETERMINE "NOW" & TREND
+        let anchorTime = 0; // Timestamp
 
         if (curJson.predictions && curJson.predictions.length > 0) {
-            // Get the very last reading provided (which is the most current prediction)
-            // NOAA predictions are sorted, so last item in a 24h range is usually the future-most point.
-            // ACTUALLY: We need the one closest to "Now". 
-            // Safer Strategy: Take the current Server Time, offset it by -5 hours (Rough EST), 
-            // find the closest reading, and use THAT time as the anchor.
-            
             const now = new Date();
-            // Find closest reading to system time (even if system is UTC, distances are relative)
-            // But to be safe, let's just use string comparison if we can.
             
-            // Let's stick to the "Anchor" strategy:
-            // We'll trust that NOAA returns a list covering "now".
-            // We will find the entry closest to the current System Time.
-            // Even if System is UTC, the 'difference' logic holds up fairly well for finding the "current" slot.
-            
-             const closest = curJson.predictions.reduce((prev: any, curr: any) => {
-                const pTime = new Date(prev.t.replace(/-/g, '/'));
-                const cTime = new Date(curr.t.replace(/-/g, '/'));
-                return (Math.abs(now.getTime() - cTime.getTime()) < Math.abs(now.getTime() - pTime.getTime()) ? curr : prev);
+            // Find closest reading to system time
+            const closest = curJson.predictions.reduce((prev: any, curr: any) => {
+                const pTime = new Date(prev.t.replace(/-/g, '/')).getTime();
+                const cTime = new Date(curr.t.replace(/-/g, '/')).getTime();
+                return (Math.abs(now.getTime() - cTime) < Math.abs(now.getTime() - pTime) ? curr : prev);
             });
             
             currentLevel = parseFloat(closest.v).toFixed(1);
-            anchorTimeStr = closest.t; // "2026-01-23 19:34" - This is our source of truth for "Now"
+            anchorTime = new Date(closest.t.replace(/-/g, '/')).getTime();
 
-            // Trend
+            // Trend Logic:
+            // If we are at the end of the list, look BACKWARDS to compare.
+            // If we are in the middle/start, look FORWARDS.
             const idx = curJson.predictions.indexOf(closest);
+            const val = parseFloat(closest.v);
+            
             if (idx < curJson.predictions.length - 1) {
+                // Look Forward
                 const nextVal = parseFloat(curJson.predictions[idx+1].v);
-                trend = nextVal > parseFloat(currentLevel) ? "rising" : "falling";
+                trend = nextVal > val ? "rising" : "falling";
+            } else if (idx > 0) {
+                // Look Backward (Backup Plan)
+                const prevVal = parseFloat(curJson.predictions[idx-1].v);
+                trend = val > prevVal ? "rising" : "falling";
             }
         }
 
-        // 2. FIND NEXT EVENT (Using Anchor Time)
-        if (schedJson.predictions && anchorTimeStr) {
-            // We simply look for the first event whose time string is "greater" than our anchor string.
-            // ISO date strings (YYYY-MM-DD HH:MM) sort alphabetically correctly!
-            // No Date Object math needed.
-            
-            const nextEvent = schedJson.predictions.find((p: any) => p.t > anchorTimeStr);
+        // 2. FIND NEXT EVENT
+        if (schedJson.predictions && anchorTime > 0) {
+            // Find first event strictly AFTER our anchor time
+            const nextEvent = schedJson.predictions.find((p: any) => {
+                const eTime = new Date(p.t.replace(/-/g, '/')).getTime();
+                return eTime > anchorTime;
+            });
             
             if (nextEvent) {
-                // Parse for pretty speaking
                 const d = new Date(nextEvent.t.replace(/-/g, '/'));
-                // Force "en-US" formatting so it doesn't use 24h time if not wanted
                 const timeStr = d.toLocaleTimeString('en-US', {hour: 'numeric', minute:'2-digit'});
                 const typeStr = nextEvent.type === 'H' ? "High Tide" : "Low Tide";
                 nextEventText = `Next is ${typeStr} at ${timeStr}`;
@@ -82,13 +77,10 @@ export async function GET() {
 
     return new Response(reports.join("\n\n"), { 
       status: 200,
-      headers: { 
-          "Content-Type": "text/plain",
-          "Cache-Control": "no-cache" 
-      } 
+      headers: { "Content-Type": "text/plain", "Cache-Control": "no-cache" } 
     });
 
   } catch (e) {
-    return new Response("Tide data is currently unavailable.", { status: 500 });
+    return new Response("Tide data unavailable.", { status: 500 });
   }
 }
