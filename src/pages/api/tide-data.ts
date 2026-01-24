@@ -6,13 +6,29 @@ export async function GET() {
     { id: "8517201", name: "Jamaica Bay" }
   ];
 
+  // Helper: Get "Yesterday" in YYYYMMDD format to cast a wide net
+  const getWideNetDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1); // Go back 1 day
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
+  };
+
+  const beginDate = getWideNetDate();
+
   try {
     const reports = await Promise.all(
       stations.map(async (site) => {
         const cb = Date.now();
-        // Request 48h schedule, 24h hourly
-        const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-        const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
+        // STRATEGY: Start from Yesterday, get 72 hours (3 days). 
+        // This guarantees we cover "Now" regardless of server timezone.
+        const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
+        
+        // For Current Level, we still use date=latest if possible, but the API doesn't support 'latest' for predictions.
+        // So we use the same "Wide Net" strategy: 24h starting yesterday covers "now".
+        const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
 
         const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
         const schedJson = await schedRes.json();
@@ -22,13 +38,13 @@ export async function GET() {
         let trend = "steady";
         let nextEventText = "No upcoming tides found";
         
-        // 1. DETERMINE "NOW" & TREND
-        let anchorTime = 0; // Timestamp
+        // 1. DETERMINE "NOW" & CURRENT LEVEL
+        let anchorTime = 0; 
 
         if (curJson.predictions && curJson.predictions.length > 0) {
-            const now = new Date();
+            const now = new Date(); // Real-time "Now"
             
-            // Find closest reading to system time
+            // Find the reading closest to absolute "Now"
             const closest = curJson.predictions.reduce((prev: any, curr: any) => {
                 const pTime = new Date(prev.t.replace(/-/g, '/')).getTime();
                 const cTime = new Date(curr.t.replace(/-/g, '/')).getTime();
@@ -38,18 +54,14 @@ export async function GET() {
             currentLevel = parseFloat(closest.v).toFixed(1);
             anchorTime = new Date(closest.t.replace(/-/g, '/')).getTime();
 
-            // Trend Logic:
-            // If we are at the end of the list, look BACKWARDS to compare.
-            // If we are in the middle/start, look FORWARDS.
+            // Trend
             const idx = curJson.predictions.indexOf(closest);
             const val = parseFloat(closest.v);
             
             if (idx < curJson.predictions.length - 1) {
-                // Look Forward
                 const nextVal = parseFloat(curJson.predictions[idx+1].v);
                 trend = nextVal > val ? "rising" : "falling";
             } else if (idx > 0) {
-                // Look Backward (Backup Plan)
                 const prevVal = parseFloat(curJson.predictions[idx-1].v);
                 trend = val > prevVal ? "rising" : "falling";
             }
@@ -57,7 +69,7 @@ export async function GET() {
 
         // 2. FIND NEXT EVENT
         if (schedJson.predictions && anchorTime > 0) {
-            // Find first event strictly AFTER our anchor time
+            // Filter strictly for events in the future (after anchor)
             const nextEvent = schedJson.predictions.find((p: any) => {
                 const eTime = new Date(p.t.replace(/-/g, '/')).getTime();
                 return eTime > anchorTime;
