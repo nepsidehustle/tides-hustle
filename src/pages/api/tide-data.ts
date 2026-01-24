@@ -6,22 +6,34 @@ export async function GET() {
     { id: "8517201", name: "Jamaica Bay", timeZone: "America/New_York" }
   ];
 
-  // 1. Helper: Get "Station Time" formatted exactly like NOAA (YYYY-MM-DD HH:MM)
-  // This ignores your laptop time and the server time. It calculates "Wall Clock Time" in NY.
-  const getStationTimeStr = (zone: string) => {
-    const opts: Intl.DateTimeFormatOptions = {
-        timeZone: zone,
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", hour12: false
+  // 1. Helper: Get "Wall Clock" Integer (YYYYMMDDHHMM)
+  const getWallClockInt = (zone: string) => {
+    const d = new Date();
+    const options: Intl.DateTimeFormatOptions = { 
+        timeZone: zone, 
+        hour12: false, 
+        year: 'numeric', month: 'numeric', day: 'numeric', 
+        hour: 'numeric', minute: 'numeric' 
     };
-    const parts = new Intl.DateTimeFormat("en-CA", opts).formatToParts(new Date());
     
-    // Reassemble manually to be bulletproof (Map parts to YYYY-MM-DD HH:MM)
-    const p = (type: string) => parts.find(x => x.type === type)?.value || "00";
-    return `${p('year')}-${p('month')}-${p('day')} ${p('hour')}:${p('minute')}`;
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(d);
+    
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || "0";
+    
+    const yyyy = getPart('year');
+    const mm = getPart('month').padStart(2, '0');
+    const dd = getPart('day').padStart(2, '0');
+    const hh = getPart('hour').padStart(2, '0');
+    const min = getPart('minute').padStart(2, '0');
+    
+    return parseInt(`${yyyy}${mm}${dd}${hh}${min}`);
   };
 
-  // Helper: Get Yesterday for wide net
+  const noaaToInt = (t: string) => {
+    return parseInt(t.replace(/[- :]/g, ''));
+  };
+
   const getWideNetDate = () => {
     const d = new Date();
     d.setDate(d.getDate() - 1); 
@@ -37,8 +49,12 @@ export async function GET() {
     const reports = await Promise.all(
       stations.map(async (site) => {
         const cb = Date.now();
+        
+        // SCHEDULE: interval=hilo (Still High/Low only)
         const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-        const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
+        
+        // CURRENT: REMOVED interval=h (Now uses default 6-minute precision)
+        const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=TideTrack&cb=${cb}`;
 
         const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
         const schedJson = await schedRes.json();
@@ -48,28 +64,21 @@ export async function GET() {
         let trend = "steady";
         let nextEventText = "No upcoming tides";
         
-        // --- THE "NEW YORK WATCH" FIX ---
-        // We generate "2026-01-23 20:30" strictly in the station's timezone.
-        const nowString = getStationTimeStr(site.timeZone);
-
-        let anchorTimeStr = ""; 
+        const nowInt = getWallClockInt(site.timeZone);
+        let anchorInt = 0; 
 
         if (curJson.predictions && curJson.predictions.length > 0) {
-            // Find reading closest to our Station Time String
+            // Find closest reading (Now scans 6-minute intervals)
             const closest = curJson.predictions.reduce((prev: any, curr: any) => {
-                // String comparison works because ISO format (YYYY-MM-DD) sorts alphabetically!
-                // We don't even need to parse Dates. Closer string = Closer time.
-                // We use simple string diff logic here or Date parsing just for 'diff' math.
-                const nowTime = Date.parse(nowString.replace(" ", "T")); 
-                const pTime = Date.parse(prev.t.replace(" ", "T"));
-                const cTime = Date.parse(curr.t.replace(" ", "T"));
-                return (Math.abs(nowTime - cTime) < Math.abs(nowTime - pTime) ? curr : prev);
+                const pInt = noaaToInt(prev.t);
+                const cInt = noaaToInt(curr.t);
+                return (Math.abs(nowInt - cInt) < Math.abs(nowInt - pInt) ? curr : prev);
             });
             
             currentLevel = parseFloat(closest.v).toFixed(1);
-            anchorTimeStr = closest.t; // Keep NOAA's string
+            anchorInt = noaaToInt(closest.t);
 
-            // Trend
+            // Trend Logic
             const idx = curJson.predictions.indexOf(closest);
             const val = parseFloat(closest.v);
             
@@ -82,14 +91,18 @@ export async function GET() {
             }
         }
 
-        // 3. FIND NEXT EVENT
-        if (schedJson.predictions && anchorTimeStr) {
-            // String Compare: "2026-01-23 22:00" > "2026-01-23 20:30"
-            const nextEvent = schedJson.predictions.find((p: any) => p.t > anchorTimeStr);
+        if (schedJson.predictions && anchorInt > 0) {
+            const nextEvent = schedJson.predictions.find((p: any) => noaaToInt(p.t) > anchorInt);
             
             if (nextEvent) {
-                const d = new Date(nextEvent.t.replace(/-/g, '/'));
-                const timeStr = d.toLocaleTimeString('en-US', {hour: 'numeric', minute:'2-digit'});
+                const [_, timePart] = nextEvent.t.split(' ');
+                let [h, m] = timePart.split(':');
+                let suffix = 'AM';
+                let hour = parseInt(h);
+                if (hour >= 12) { suffix = 'PM'; if (hour > 12) hour -= 12; }
+                if (hour === 0) { hour = 12; }
+                
+                const timeStr = `${hour}:${m} ${suffix}`;
                 const typeStr = nextEvent.type === 'H' ? "High Tide" : "Low Tide";
                 nextEventText = `Next is ${typeStr} at ${timeStr}`;
             }

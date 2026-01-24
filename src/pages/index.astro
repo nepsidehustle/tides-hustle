@@ -73,11 +73,12 @@ export const prerender = false;
         <button onclick="window.location.reload()" class="refresh-btn">Refresh</button>
         
         <div class="disclaimer-box">
+            Updates every ~6 minutes.<br>
             <strong>⚠️ EDUCATIONAL USE ONLY</strong><br>
             This data is estimated and may be inaccurate.<br>
             <span class="warning-text">DO NOT USE FOR NAVIGATION.</span><br>
             Not affiliated with NOAA.<br><br>
-            Build v15.0 (Timezone Aware)
+            Build v16.0 (High Precision)
         </div>
     </div>
 
@@ -87,14 +88,13 @@ export const prerender = false;
             { id: "8517201", name: "Jamaica Bay" }
         ];
 
-        // Clock Logic (Now with Timezone)
+        // Clock Logic
         setInterval(() => {
             const now = new Date();
-            // This little 'timeZoneName' option does all the work for us
             const timeString = now.toLocaleTimeString([], {
                 hour: 'numeric', 
                 minute:'2-digit',
-                timeZoneName: 'short' // Adds EST, EDT, PST, etc.
+                timeZoneName: 'short'
             });
             const clockEl = document.getElementById('clock');
             if(clockEl) clockEl.innerText = timeString;
@@ -103,8 +103,11 @@ export const prerender = false;
         async function fetchStationData(station) {
             try {
                 const cb = Date.now();
+                // Schedule: interval=hilo (Kept for High/Low)
                 const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-                const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
+                
+                // Current: REMOVED interval=h (Forces 6-min data)
+                const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=TideTrack&cb=${cb}`;
 
                 const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
                 const schedData = await schedRes.json();
