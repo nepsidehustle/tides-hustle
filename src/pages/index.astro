@@ -8,168 +8,12 @@ export const prerender = false;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TideTrack</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        button { cursor: pointer; }
-    </style>
-</head>
-<body style="display: flex; flex-direction: column; align-items: center;">
-
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="font-size: 24px; margin: 0 0 10px 0;">Tide<span style="color: #007AFF;">Track</span></h1>
-        <div id="clock" style="background: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; color: #555; display: inline-block; border: 1px solid #ccc; font-size: 14px;">--:--</div>
-    </div>
-
-    <div id="app" style="width: 100%; max-width: 450px;">
-        <div style="text-align: center; color: #888; padding: 20px;">Loading Data...</div>
-    </div>
-
-    <div style="text-align: center; margin-top: 30px;">
-        <button onclick="window.location.reload()" style="background: #000; color: #fff; padding: 12px 24px; border: none; border-radius: 8px; font-weight: bold;">Refresh</button>
-        <p style="font-size: 10px; color: #999; margin-top: 10px;">v13.0 (Trend Indicators)</p>
-    </div>
-
-    <script>
-        const STATIONS = [
-            { id: "8661070", name: "Myrtle Beach" },
-            { id: "8517201", name: "Jamaica Bay" }
-        ];
-
-        // Clock
-        setInterval(() => {
-            document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
-        }, 1000);
-
-        async function fetchStationData(station) {
-            try {
-                const cb = Date.now();
-                // 1. Get Schedule
-                const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-                // 2. Get Current
-                const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=h&format=json&application=TideTrack&cb=${cb}`;
-
-                const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
-                const schedData = await schedRes.json();
-                const curData = await curRes.json();
-
-                // Process Current & Trend
-                let currentLevel = "---";
-                let trend = "STABLE"; // Default
-                
-                if (curData.predictions && curData.predictions.length > 0) {
-                    const now = new Date();
-                    const closest = curData.predictions.reduce((prev, curr) => {
-                        const pTime = new Date(prev.t.replace(/-/g, '/'));
-                        const cTime = new Date(curr.t.replace(/-/g, '/'));
-                        return (Math.abs(now - cTime) < Math.abs(now - pTime)) ? curr : prev;
-                    });
-                    currentLevel = parseFloat(closest.v).toFixed(1);
-                    
-                    // Trend Logic
-                    const idx = curData.predictions.indexOf(closest);
-                    if (idx < curData.predictions.length - 1) {
-                        const nextVal = parseFloat(curData.predictions[idx+1].v);
-                        const currVal = parseFloat(currentLevel);
-                        if (nextVal > currVal) trend = "RISING";
-                        if (nextVal < currVal) trend = "FALLING";
-                    }
-                }
-
-                // Process Timeline
-                let timeline = [];
-                if (schedData.predictions) {
-                    const now = new Date();
-                    timeline = schedData.predictions
-                        .filter(p => new Date(p.t.replace(/-/g, '/')) > now)
-                        .slice(0, 4)
-                        .map(p => ({ time: p.t, val: p.v, isHigh: p.type === 'H' }));
-                }
-
-                return { name: station.name, current: currentLevel, trend: trend, timeline: timeline };
-            } catch (err) { return { name: station.name, error: true }; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: #f0f2f5; 
+            margin: 0; 
+            padding: 20px; 
         }
-
-        async function init() {
-            const container = document.getElementById('app');
-            try {
-                const results = await Promise.all(STATIONS.map(fetchStationData));
-                container.innerHTML = ''; 
-
-                results.forEach(station => {
-                    if (station.error) {
-                        container.innerHTML += `<div style="background:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center; color:red;">⚠️ ${station.name} Error</div>`;
-                        return;
-                    }
-
-                    // TABLE ROWS
-                    let rowsHTML = '';
-                    if (station.timeline.length === 0) {
-                        rowsHTML = '<tr><td colspan="2" style="text-align:center; color:#999; padding:15px;">No Data</td></tr>';
-                    } else {
-                        station.timeline.forEach(event => {
-                            const d = new Date(event.time.replace(/-/g, '/'));
-                            const tStr = d.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
-                            
-                            rowsHTML += `
-                                <tr style="border-bottom: 1px solid #f4f4f4;">
-                                    <td style="padding: 12px 0; text-align: left;">
-                                        <span style="background: ${event.isHigh ? '#e6f3ff' : '#f2f2f2'}; color: ${event.isHigh ? '#0066cc' : '#555'}; padding: 5px 8px; border-radius: 6px; font-weight: 800; font-size: 11px;">
-                                            ${event.isHigh ? 'HIGH' : 'LOW'}
-                                        </span>
-                                    </td>
-                                    <td style="padding: 12px 0; text-align: right;">
-                                        <div style="font-weight: 800; font-size: 18px; color: #222;">${parseFloat(event.val).toFixed(1)} ft</div>
-                                        <div style="color: #888; font-size: 13px; font-weight: 600;">${tStr}</div>
-                                    </td>
-                                </tr>
-                            `;
-                        });
-                    }
-
-                    // TREND STYLING
-                    const isRising = station.trend === "RISING";
-                    const arrow = isRising ? "↑" : "↓";
-                    // Only show arrow if not stable
-                    const arrowDisplay = station.trend === "STABLE" ? "" : arrow;
-                    const trendColor = isRising ? "#10b981" : "#ef4444"; // Green or Red
-                    const trendBg = isRising ? "#ecfdf5" : "#fef2f2"; // Light Green or Light Red
-
-                    // CARD HTML
-                    const card = document.createElement('div');
-                    card.style.cssText = "background: white; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);";
-                    
-                    card.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 10px; width: 100%;">
-                            
-                            <div style="text-align: left;">
-                                <div style="font-size: 20px; font-weight: 800; color: #111; line-height: 1.2;">${station.name}</div>
-                                <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-top: 4px;">LIVE STATUS</div>
-                            </div>
-
-                            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-                                <div style="font-size: 36px; font-weight: 900; color: #007AFF; line-height: 1;">
-                                    ${station.current}<span style="font-size: 14px; color: #999; vertical-align: top; margin-left: 2px; font-weight: 700;">ft</span>
-                                </div>
-                                <div style="margin-top: 6px; background: ${trendBg}; color: ${trendColor}; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; display: inline-block;">
-                                    ${arrowDisplay} ${station.trend}
-                                </div>
-                            </div>
-                        </div>
-
-                        <table style="width: 100%; border-collapse: collapse;">
-                            ${rowsHTML}
-                        </table>
-                    `;
-                    container.appendChild(car---
-export const prerender = false;
----
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TideTrack</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         button { cursor: pointer; }
     </style>
 </head>
@@ -177,7 +21,7 @@ export const prerender = false;
 
     <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="font-size: 24px; margin: 0 0 10px 0;">Tide<span style="color: #007AFF;">Track</span></h1>
-        <div id="clock" style="background: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; color: #555; display: inline-block; border: 1px solid #ccc; font-size: 14px;">--:--</div>
+        <div id="clock" style="background:white; padding:5px 15px; border-radius:20px; font-weight:bold; color:#555; display:inline-block; border:1px solid #ccc;">--:--</div>
     </div>
 
     <div id="app" style="width: 100%; max-width: 450px;">
@@ -192,7 +36,7 @@ export const prerender = false;
             This data is estimated and may be inaccurate.<br>
             <span style="color: #ef4444; font-weight: bold;">DO NOT USE FOR NAVIGATION.</span><br>
             Not affiliated with NOAA.<br><br>
-            Build v13.1
+            Build v14.0 (Restored Layout)
         </div>
     </div>
 
@@ -202,6 +46,7 @@ export const prerender = false;
             { id: "8517201", name: "Jamaica Bay" }
         ];
 
+        // Clock
         setInterval(() => {
             document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
         }, 1000);
@@ -316,21 +161,11 @@ export const prerender = false;
                     `;
                     container.appendChild(card);
                 });
-            } catch (err) {
-                container.innerHTML = `<div style="text-align:center;">Error: ${err.message}</div>`;
-            }
-        }
-        init();
-    </script>
-</body>
-</html>d);
-                });
 
             } catch (err) {
                 container.innerHTML = `<div style="text-align:center;">Error: ${err.message}</div>`;
             }
         }
-
         init();
     </script>
 </body>
