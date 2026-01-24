@@ -9,6 +9,7 @@ A dual-engine tide monitoring application for Myrtle Beach and Jamaica Bay.
 ## ✨ Features
 
 ### 1. Visual Dashboard (Frontend)
+- **High Precision Mode:** Fetches data every **6 minutes** for near real-time water levels.
 - **Zero-Crash Architecture:** Fetches data directly from NOAA in the browser (Client-side).
 - **Jamless Layout:** Uses HTML Tables and Inline CSS to prevent layout shifts.
 - **Auto-Timezone:** Clock detects browser location (EST/EDT/PST).
@@ -16,7 +17,7 @@ A dual-engine tide monitoring application for Myrtle Beach and Jamaica Bay.
 ### 2. Siri Intelligence (Backend API)
 - **Natural Language:** Returns a simple paragraph of text Siri can read directly.
 - **Timezone Proof:** Uses "Integer Math" (e.g., `20260123`) to sync NOAA data with Wall Clock time, ignoring Server UTC offsets.
-- **Smart Trends:** Calculates "Rising/Falling" logic by looking backward if at the end of a dataset.
+- **Smart Trends:** Calculates "Rising/Falling" logic by scanning 6-minute intervals.
 
 ## 📱 How to Set Up Siri
 
