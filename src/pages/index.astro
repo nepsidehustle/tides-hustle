@@ -8,20 +8,61 @@ export const prerender = false;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TideTrack</title>
     <style>
+        /* BASE STYLES */
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             background: #f0f2f5; 
             margin: 0; 
             padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
         }
         button { cursor: pointer; }
+
+        /* HEADER & CLOCK */
+        .header { text-align: center; margin-bottom: 30px; }
+        .title { font-size: 24px; margin: 0 0 10px 0; font-weight: 900; }
+        .highlight { color: #007AFF; }
+        
+        .clock-badge {
+            background: white; 
+            padding: 5px 15px; 
+            border-radius: 20px; 
+            font-weight: bold; 
+            color: #555; 
+            display: inline-block; 
+            border: 1px solid #ccc; 
+            font-size: 14px;
+        }
+
+        /* DISCLAIMER FOOTER */
+        .disclaimer-box {
+            font-size: 10px; 
+            color: #999; 
+            margin-top: 25px; 
+            line-height: 1.6; 
+            max-width: 320px; 
+            margin-left: auto; 
+            margin-right: auto;
+        }
+        .warning-text { color: #ef4444; font-weight: bold; }
+        
+        .refresh-btn {
+            background: #000; 
+            color: #fff; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: bold;
+        }
     </style>
 </head>
-<body style="display: flex; flex-direction: column; align-items: center;">
+<body>
 
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="font-size: 24px; margin: 0 0 10px 0;">Tide<span style="color: #007AFF;">Track</span></h1>
-        <div id="clock" style="background:white; padding:5px 15px; border-radius:20px; font-weight:bold; color:#555; display:inline-block; border:1px solid #ccc;">--:--</div>
+    <div class="header">
+        <h1 class="title">Tide<span class="highlight">Track</span></h1>
+        <div id="clock" class="clock-badge">--:--</div>
     </div>
 
     <div id="app" style="width: 100%; max-width: 450px;">
@@ -29,14 +70,14 @@ export const prerender = false;
     </div>
 
     <div style="text-align: center; margin-top: 40px; padding-bottom: 40px;">
-        <button onclick="window.location.reload()" style="background: #000; color: #fff; padding: 12px 24px; border: none; border-radius: 8px; font-weight: bold;">Refresh</button>
+        <button onclick="window.location.reload()" class="refresh-btn">Refresh</button>
         
-        <div style="font-size: 10px; color: #999; margin-top: 25px; line-height: 1.6; max-width: 320px; margin-left: auto; margin-right: auto;">
+        <div class="disclaimer-box">
             <strong>⚠️ EDUCATIONAL USE ONLY</strong><br>
             This data is estimated and may be inaccurate.<br>
-            <span style="color: #ef4444; font-weight: bold;">DO NOT USE FOR NAVIGATION.</span><br>
+            <span class="warning-text">DO NOT USE FOR NAVIGATION.</span><br>
             Not affiliated with NOAA.<br><br>
-            Build v14.0 (Restored Layout)
+            Build v15.0 (Timezone Aware)
         </div>
     </div>
 
@@ -46,9 +87,17 @@ export const prerender = false;
             { id: "8517201", name: "Jamaica Bay" }
         ];
 
-        // Clock
+        // Clock Logic (Now with Timezone)
         setInterval(() => {
-            document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+            const now = new Date();
+            // This little 'timeZoneName' option does all the work for us
+            const timeString = now.toLocaleTimeString([], {
+                hour: 'numeric', 
+                minute:'2-digit',
+                timeZoneName: 'short' // Adds EST, EDT, PST, etc.
+            });
+            const clockEl = document.getElementById('clock');
+            if(clockEl) clockEl.innerText = timeString;
         }, 1000);
 
         async function fetchStationData(station) {
@@ -161,7 +210,6 @@ export const prerender = false;
                     `;
                     container.appendChild(card);
                 });
-
             } catch (err) {
                 container.innerHTML = `<div style="text-align:center;">Error: ${err.message}</div>`;
             }
