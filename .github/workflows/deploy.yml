@@ -14,14 +14,20 @@ jobs:
           node-version: '20'
       - name: Install
         run: npm install
+
+      # --- MOVE BUILD HERE ---
+      # This creates the 'dist/' folder that Cloudflare AND AWS both need
+      - name: Build Astro
+        run: DEPLOY_TARGET=caddy npm run build
+
       - name: Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          # We tell wrangler to just take the folder we just built
           command: pages deploy dist --project-name=tides-hustle --branch=main
-      - name: Build For Caddy
-        run: DEPLOY_TARGET=caddy npm run build
+
       - name: Sync AWS
         uses: easingthemes/ssh-deploy@main
         env:
