@@ -1,4 +1,5 @@
 name: Dual Deploy: Cloudflare + AWS Caddy
+
 on:
   push:
     branches: [main]
@@ -7,7 +8,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
       
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -23,14 +25,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          # Cloudflare build happens internally via this command
           command: pages deploy dist --project-name=tides-hustle --branch=main
 
       # --- STEP 2: BUILD FOR AWS (STATIC VERSION) ---
       - name: Build Static Version for Caddy
         run: |
-          # We inject the 'caddy' target so your astro.config.mjs 
-          # switches to 'static' and sets base to '/tides'
           DEPLOY_TARGET=caddy npm run build
 
       # --- STEP 3: SYNC TO AWS SERVER ---
