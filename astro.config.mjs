@@ -1,14 +1,19 @@
+import { defineConfig } from 'astro/config'; // <--- THIS LINE IS THE FIX
+import cloudflare from "@astrojs/cloudflare";
+
+// Robust check for the Caddy flag
+const isCaddyBuild = process.env.DEPLOY_TARGET === 'caddy';
+
 export default defineConfig({
-  // CLOUDFLARE VERSION: Must be 'server' and have NO 'base' (just '/')
-  // CADDY VERSION: Must be 'static' and have base: '/tides'
-  
+  // Switch between Static for Caddy and Server for Cloudflare
   output: isCaddyBuild ? 'static' : 'server',
   
-  // Use undefined for Cloudflare to ensure it defaults to root properly
+  // Use explicit strings: /tides for Caddy, / for Cloudflare
   base: isCaddyBuild ? '/tides' : '/',
 
+  // Only load the adapter if NOT a Caddy build
   adapter: isCaddyBuild ? undefined : cloudflare(),
 
-  // Try setting this to 'ignore' or removing it to see if Cloudflare settles down
+  // Caddy likes trailing slashes, Cloudflare is indifferent here
   trailingSlash: isCaddyBuild ? 'always' : 'ignore', 
 });
