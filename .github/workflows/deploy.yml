@@ -8,27 +8,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install
-        run: npm install
+      - run: npm install
 
-      # --- MOVE BUILD HERE ---
-      # This creates the 'dist/' folder that Cloudflare AND AWS both need
-      - name: Build Astro
-        run: DEPLOY_TARGET=caddy npm run build
+      # STEP A: Build the CLOUDFLARE version (Root path /)
+      - name: Build for Cloudflare
+        run: npm run build 
 
-      - name: Cloudflare
+      # STEP B: Deploy the CLOUDFLARE version
+      - name: Cloudflare Deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          # We tell wrangler to just take the folder we just built
           command: pages deploy dist --project-name=tides-hustle --branch=main
 
-      - name: Sync AWS
+      # STEP C: Build the CADDY version (Sub-path /tides)
+      # This overwrites the dist/ folder with the Caddy version
+      - name: Build for Caddy
+        run: DEPLOY_TARGET=caddy npm run build
+
+      # STEP D: Sync the CADDY version to AWS
+      - name: Push to AWS
         uses: easingthemes/ssh-deploy@main
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

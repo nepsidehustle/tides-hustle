@@ -1,18 +1,14 @@
-import { defineConfig } from 'astro/config';
-import cloudflare from "@astrojs/cloudflare";
-
-const isCaddyBuild = process.env.DEPLOY_TARGET === 'caddy';
-
 export default defineConfig({
-  // Switch between Static and SSR
+  // CLOUDFLARE VERSION: Must be 'server' and have NO 'base' (just '/')
+  // CADDY VERSION: Must be 'static' and have base: '/tides'
+  
   output: isCaddyBuild ? 'static' : 'server',
   
-  // Set the base path for Caddy subfolder
+  // Use undefined for Cloudflare to ensure it defaults to root properly
   base: isCaddyBuild ? '/tides' : '/',
 
-  // This is the clean way: If Caddy, adapter is undefined (empty).
-  // If not Caddy, it's the cloudflare object.
   adapter: isCaddyBuild ? undefined : cloudflare(),
 
-  trailingSlash: 'always',
+  // Try setting this to 'ignore' or removing it to see if Cloudflare settles down
+  trailingSlash: isCaddyBuild ? 'always' : 'ignore', 
 });
