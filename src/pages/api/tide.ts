@@ -1,5 +1,4 @@
-export const prerender = false;
-
+export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
 export async function GET() {
   const stations = [
     { id: "8661070", name: "Myrtle Beach" },
