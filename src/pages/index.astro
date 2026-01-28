@@ -78,7 +78,7 @@ export const prerender = false;
             This data is estimated and may be inaccurate.<br>
             <span class="warning-text">DO NOT USE FOR NAVIGATION.</span><br>
             Not affiliated with NOAA.<br><br>
-            Build v16.0 (High Precision)
+            Build v17.0 (Midnight Fix)
         </div>
     </div>
 
@@ -100,14 +100,26 @@ export const prerender = false;
             if(clockEl) clockEl.innerText = timeString;
         }, 1000);
 
+        // Helper: Get Yesterday (YYYYMMDD)
+        // This ensures we always have past context and future data, regardless of midnight
+        function getWideNetDate() {
+            const d = new Date();
+            d.setDate(d.getDate() - 1); 
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}`;
+        }
+
         async function fetchStationData(station) {
             try {
                 const cb = Date.now();
-                // Schedule: interval=hilo (Kept for High/Low)
-                const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=48&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-                
-                // Current: REMOVED interval=h (Forces 6-min data)
-                const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&date=today&range=24&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=TideTrack&cb=${cb}`;
+                const beginDate = getWideNetDate();
+
+                // CHANGED: Use begin_date + range=72 instead of date=today
+                // This fetches Yesterday, Today, and Tomorrow safely.
+                const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
+                const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=TideTrack&cb=${cb}`;
 
                 const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
                 const schedData = await schedRes.json();
