@@ -1,0 +1,45 @@
+name: Dual Deploy: Cloudflare + AWS Caddy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      # --- STEP 1: DEPLOY TO CLOUDFLARE (SSR VERSION) ---
+      - name: Cloudflare Pages Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          # Cloudflare build happens internally via this command
+          command: pages deploy dist --project-name=tides-hustle --branch=main
+
+      # --- STEP 2: BUILD FOR AWS (STATIC VERSION) ---
+      - name: Build Static Version for Caddy
+        run: |
+          # We inject the 'caddy' target so your astro.config.mjs 
+          # switches to 'static' and sets base to '/tides'
+          DEPLOY_TARGET=caddy npm run build
+
+      # --- STEP 3: SYNC TO AWS SERVER ---
+      - name: Push to AWS via SSH
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.SERVER_IP }}
+          REMOTE_USER: ubuntu
+          SOURCE: "dist/"
+          TARGET: "/var/www/tides/dist"
+          ARGS: "-rlgoDzvc -i --delete"
