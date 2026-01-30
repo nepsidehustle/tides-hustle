@@ -1,5 +1,5 @@
 ---
-export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
+export const prerender = false;
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -8,7 +8,6 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TideTrack</title>
     <style>
-        /* BASE STYLES */
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             background: #f0f2f5; 
@@ -20,7 +19,6 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
         }
         button { cursor: pointer; }
 
-        /* HEADER & CLOCK */
         .header { text-align: center; margin-bottom: 30px; }
         .title { font-size: 24px; margin: 0 0 10px 0; font-weight: 900; }
         .highlight { color: #007AFF; }
@@ -36,7 +34,6 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
             font-size: 14px;
         }
 
-        /* DISCLAIMER FOOTER */
         .disclaimer-box {
             font-size: 10px; 
             color: #999; 
@@ -78,30 +75,58 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
             This data is estimated and may be inaccurate.<br>
             <span class="warning-text">DO NOT USE FOR NAVIGATION.</span><br>
             Not affiliated with NOAA.<br><br>
-            Build v17.0 (Midnight Fix)
+            Build v18.0 (Coast-to-Coast)
         </div>
     </div>
 
     <script>
         const STATIONS = [
-            { id: "8661070", name: "Myrtle Beach" },
-            { id: "8517201", name: "Jamaica Bay" }
+            { id: "8661070", name: "Myrtle Beach", timeZone: "America/New_York" },
+            { id: "8517201", name: "Jamaica Bay", timeZone: "America/New_York" },
+            { id: "9410580", name: "Newport Beach", timeZone: "America/Los_Angeles" }
         ];
 
-        // Clock Logic
+        // 1. Clock Logic
         setInterval(() => {
             const now = new Date();
             const timeString = now.toLocaleTimeString([], {
-                hour: 'numeric', 
-                minute:'2-digit',
-                timeZoneName: 'short'
+                hour: 'numeric', minute:'2-digit', timeZoneName: 'short'
             });
             const clockEl = document.getElementById('clock');
             if(clockEl) clockEl.innerText = timeString;
         }, 1000);
 
-        // Helper: Get Yesterday (YYYYMMDD)
-        // This ensures we always have past context and future data, regardless of midnight
+        // 2. Helper: "Integer Math" for Timezones (Matches API Logic)
+        // This ensures a user in NY sees accurate "Current Status" for a CA station
+        function getStationWallClockInt(zone) {
+            const d = new Date();
+            const options = { 
+                timeZone: zone, hour12: false, 
+                year: 'numeric', month: 'numeric', day: 'numeric', 
+                hour: 'numeric', minute: 'numeric' 
+            };
+            const formatter = new Intl.DateTimeFormat('en-US', options);
+            const parts = formatter.formatToParts(d);
+            const getPart = (type) => parts.find(p => p.type === type)?.value || "0";
+            
+            const yyyy = getPart('year');
+            const mm = getPart('month').padStart(2, '0');
+            const dd = getPart('day').padStart(2, '0');
+            const hh = getPart('hour').padStart(2, '0');
+            const min = getPart('minute').padStart(2, '0');
+            return parseInt(`${yyyy}${mm}${dd}${hh}${min}`);
+        }
+
+        // Helper: Convert NOAA string "2026-01-29 13:00" -> 202601291300
+        function noaaToInt(t) {
+            return parseInt(t.replace(/[- :]/g, ''));
+        }
+
+        // Helper: Get station timezone abbreviation (EST, PST) for display
+        function getZoneAbbr(zone) {
+            return new Date().toLocaleTimeString('en-us',{timeZone:zone, timeZoneName:'short'}).split(' ')[2];
+        }
+
         function getWideNetDate() {
             const d = new Date();
             d.setDate(d.getDate() - 1); 
@@ -116,8 +141,6 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
                 const cb = Date.now();
                 const beginDate = getWideNetDate();
 
-                // CHANGED: Use begin_date + range=72 instead of date=today
-                // This fetches Yesterday, Today, and Tomorrow safely.
                 const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
                 const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${station.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=TideTrack&cb=${cb}`;
 
@@ -127,16 +150,20 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
 
                 let currentLevel = "---";
                 let trend = "STABLE";
-                
+                let stationTimeInt = getStationWallClockInt(station.timeZone);
+
+                // --- NEW TIMEZONE AWARE LOGIC ---
                 if (curData.predictions && curData.predictions.length > 0) {
-                    const now = new Date();
+                    // Find closest reading using Integer comparison
                     const closest = curData.predictions.reduce((prev, curr) => {
-                        const pTime = new Date(prev.t.replace(/-/g, '/'));
-                        const cTime = new Date(curr.t.replace(/-/g, '/'));
-                        return (Math.abs(now - cTime) < Math.abs(now - pTime)) ? curr : prev;
+                        const pInt = noaaToInt(prev.t);
+                        const cInt = noaaToInt(curr.t);
+                        return (Math.abs(stationTimeInt - cInt) < Math.abs(stationTimeInt - pInt)) ? curr : prev;
                     });
+                    
                     currentLevel = parseFloat(closest.v).toFixed(1);
                     
+                    // Trend
                     const idx = curData.predictions.indexOf(closest);
                     if (idx < curData.predictions.length - 1) {
                         const nextVal = parseFloat(curData.predictions[idx+1].v);
@@ -146,16 +173,23 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
                     }
                 }
 
+                // Filter Timeline: Only show events strictly AFTER the current station time
                 let timeline = [];
                 if (schedData.predictions) {
-                    const now = new Date();
                     timeline = schedData.predictions
-                        .filter(p => new Date(p.t.replace(/-/g, '/')) > now)
+                        .filter(p => noaaToInt(p.t) > stationTimeInt)
                         .slice(0, 4)
                         .map(p => ({ time: p.t, val: p.v, isHigh: p.type === 'H' }));
                 }
 
-                return { name: station.name, current: currentLevel, trend: trend, timeline: timeline };
+                return { 
+                    name: station.name, 
+                    current: currentLevel, 
+                    trend: trend, 
+                    timeline: timeline,
+                    zoneAbbr: getZoneAbbr(station.timeZone)
+                };
+
             } catch (err) { return { name: station.name, error: true }; }
         }
 
@@ -176,8 +210,15 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
                         rowsHTML = '<tr><td colspan="2" style="text-align:center; color:#999; padding:15px;">No Data</td></tr>';
                     } else {
                         station.timeline.forEach(event => {
-                            const d = new Date(event.time.replace(/-/g, '/'));
-                            const tStr = d.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+                            // Display the raw NOAA time string (which is already Local Station Time)
+                            // We chop off the date "2026-01-29 13:00" -> "13:00" -> "1:00 PM"
+                            const [_, timePart] = event.time.split(' ');
+                            let [h, m] = timePart.split(':');
+                            let suffix = 'AM';
+                            let hour = parseInt(h);
+                            if (hour >= 12) { suffix = 'PM'; if (hour > 12) hour -= 12; }
+                            if (hour === 0) { hour = 12; }
+                            const tStr = `${hour}:${m} ${suffix}`;
                             
                             rowsHTML += `
                                 <tr style="border-bottom: 1px solid #f4f4f4;">
@@ -208,7 +249,7 @@ export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 10px; width: 100%;">
                             <div style="text-align: left;">
                                 <div style="font-size: 20px; font-weight: 800; color: #111; line-height: 1.2;">${station.name}</div>
-                                <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-top: 4px;">LIVE STATUS</div>
+                                <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-top: 4px;">LIVE STATUS (${station.zoneAbbr})</div>
                             </div>
                             <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
                                 <div style="font-size: 36px; font-weight: 900; color: #007AFF; line-height: 1;">

@@ -1,11 +1,12 @@
-export const prerender = process.env.DEPLOY_TARGET !== 'caddy';
+export const prerender = false;
+
 export async function GET() {
   const stations = [
     { id: "8661070", name: "Myrtle Beach", timeZone: "America/New_York" },
-    { id: "8517201", name: "Jamaica Bay", timeZone: "America/New_York" }
+    { id: "8517201", name: "Jamaica Bay", timeZone: "America/New_York" },
+    { id: "9410580", name: "Newport Beach", timeZone: "America/Los_Angeles" }
   ];
 
-  // 1. Helper: Get "Wall Clock" Integer (YYYYMMDDHHMM)
   const getWallClockInt = (zone: string) => {
     const d = new Date();
     const options: Intl.DateTimeFormatOptions = { 
@@ -17,7 +18,6 @@ export async function GET() {
     
     const formatter = new Intl.DateTimeFormat('en-US', options);
     const parts = formatter.formatToParts(d);
-    
     const getPart = (type: string) => parts.find(p => p.type === type)?.value || "0";
     
     const yyyy = getPart('year');
@@ -29,9 +29,7 @@ export async function GET() {
     return parseInt(`${yyyy}${mm}${dd}${hh}${min}`);
   };
 
-  const noaaToInt = (t: string) => {
-    return parseInt(t.replace(/[- :]/g, ''));
-  };
+  const noaaToInt = (t: string) => parseInt(t.replace(/[- :]/g, ''));
 
   const getWideNetDate = () => {
     const d = new Date();
@@ -48,11 +46,8 @@ export async function GET() {
     const reports = await Promise.all(
       stations.map(async (site) => {
         const cb = Date.now();
-        
-        // SCHEDULE: interval=hilo (Still High/Low only)
+        // Request 6-minute precision data (no interval=h)
         const schedUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=TideTrack&cb=${cb}`;
-        
-        // CURRENT: REMOVED interval=h (Now uses default 6-minute precision)
         const curUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${site.id}&begin_date=${beginDate}&range=72&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=TideTrack&cb=${cb}`;
 
         const [schedRes, curRes] = await Promise.all([fetch(schedUrl), fetch(curUrl)]);
@@ -67,7 +62,6 @@ export async function GET() {
         let anchorInt = 0; 
 
         if (curJson.predictions && curJson.predictions.length > 0) {
-            // Find closest reading (Now scans 6-minute intervals)
             const closest = curJson.predictions.reduce((prev: any, curr: any) => {
                 const pInt = noaaToInt(prev.t);
                 const cInt = noaaToInt(curr.t);
@@ -77,7 +71,6 @@ export async function GET() {
             currentLevel = parseFloat(closest.v).toFixed(1);
             anchorInt = noaaToInt(closest.t);
 
-            // Trend Logic
             const idx = curJson.predictions.indexOf(closest);
             const val = parseFloat(closest.v);
             
@@ -92,7 +85,6 @@ export async function GET() {
 
         if (schedJson.predictions && anchorInt > 0) {
             const nextEvent = schedJson.predictions.find((p: any) => noaaToInt(p.t) > anchorInt);
-            
             if (nextEvent) {
                 const [_, timePart] = nextEvent.t.split(' ');
                 let [h, m] = timePart.split(':');
