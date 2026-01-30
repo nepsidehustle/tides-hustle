@@ -1,19 +1,18 @@
-import { defineConfig } from 'astro/config'; // <--- THIS LINE IS THE FIX
-import cloudflare from "@astrojs/cloudflare";
+import { defineConfig } from 'astro/config';
+import cloudflare from '@astrojs/cloudflare';
 
-// Robust check for the Caddy flag
+// Check if we are building for Caddy
 const isCaddyBuild = process.env.DEPLOY_TARGET === 'caddy';
 
 export default defineConfig({
-  // Switch between Static for Caddy and Server for Cloudflare
+  // Caddy = Static (Files). Cloudflare = Server (API).
   output: isCaddyBuild ? 'static' : 'server',
   
-  // Use explicit strings: /tides for Caddy, / for Cloudflare
+  // Base URL handling
   base: isCaddyBuild ? '/tides' : '/',
 
-  // Only load the adapter if NOT a Caddy build
+  // Only use the Cloudflare adapter if we are NOT on Caddy
   adapter: isCaddyBuild ? undefined : cloudflare(),
 
-  // Caddy likes trailing slashes, Cloudflare is indifferent here
   trailingSlash: isCaddyBuild ? 'always' : 'ignore', 
 });
