@@ -1,4 +1,4 @@
-name: Dual Deploy
+name: Deploy Cloudflare Only
 on:
   push:
     branches:
@@ -13,30 +13,14 @@ jobs:
           node-version: '20'
       - run: npm install
 
-      # STEP A: Build the CLOUDFLARE version (Root path /)
+      # STEP A: Build for Cloudflare (Uses your updated astro.config.mjs)
       - name: Build for Cloudflare
         run: npm run build 
 
-      # STEP B: Deploy the CLOUDFLARE version
+      # STEP B: Deploy to Cloudflare Pages
       - name: Cloudflare Deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           command: pages deploy dist --project-name=tides-hustle --branch=main
-
-      # STEP C: Build the CADDY version (Sub-path /tides)
-      # This overwrites the dist/ folder with the Caddy version
-      - name: Build for Caddy
-        run: DEPLOY_TARGET=caddy npm run build
-
-      # STEP D: Sync the CADDY version to AWS
-      - name: Push to AWS
-        uses: easingthemes/ssh-deploy@main
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.SERVER_IP }}
-          REMOTE_USER: ubuntu
-          SOURCE: "dist/"
-          TARGET: "/var/www/tides/dist"
-          ARGS: "-rlgoDzvc -i --delete"
